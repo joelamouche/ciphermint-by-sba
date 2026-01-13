@@ -36,7 +36,7 @@ describe("Full Integration Flow", function () {
 
   async function deployComplianceRules(registryAddr: string) {
     const factory = await ethers.getContractFactory("ComplianceRules");
-    const contract = await factory.deploy(registryAddr, 1); // minKycLevel = 1
+    const contract = await factory.deploy(registryAddr);
     return contract;
   }
 
@@ -49,28 +49,16 @@ describe("Full Integration Flow", function () {
   async function attestUser(
     userAddress: string,
     birthYearOffset: number,
-    countryCode: number,
-    kycLevel: number,
-    isBlacklisted: boolean,
+    nameHash: string,
     signer: HardhatEthersSigner,
   ) {
     const encrypted = fhevm.createEncryptedInput(registryAddress, signer.address);
     encrypted.add8(birthYearOffset);
-    encrypted.add16(countryCode);
-    encrypted.add8(kycLevel);
-    encrypted.addBool(isBlacklisted);
     const encryptedInput = await encrypted.encrypt();
 
     await identityRegistry
       .connect(signer)
-      .attestIdentity(
-        userAddress,
-        encryptedInput.handles[0],
-        encryptedInput.handles[1],
-        encryptedInput.handles[2],
-        encryptedInput.handles[3],
-        encryptedInput.inputProof,
-      );
+      .attestIdentity(userAddress, encryptedInput.handles[0], nameHash, encryptedInput.inputProof);
   }
 
   before(async function () {
@@ -125,22 +113,42 @@ describe("Full Integration Flow", function () {
   });
 
   describe("User Attestation", function () {
-    it("should attest Alice (compliant user)", async function () {
-      // Alice: KYC level 3, not blacklisted
-      await attestUser(signers.alice.address, 90, 840, 3, false, signers.registrar);
+    it("should attest Alice (over 18, compliant user)", async function () {
+      // Alice: Born 1990 (offset 90), age 36 in 2026
+      const aliceNameHash = ethers.keccak256(ethers.toUtf8Bytes("Alice Smith"));
+      await attestUser(signers.alice.address, 90, aliceNameHash, signers.registrar);
       expect(await identityRegistry.isAttested(signers.alice.address)).to.be.true;
+      expect(await identityRegistry.fullNameHashes(signers.alice.address)).to.eq(aliceNameHash);
     });
 
-    it("should attest Bob (compliant user)", async function () {
-      // Bob: KYC level 2, not blacklisted
-      await attestUser(signers.bob.address, 95, 276, 2, false, signers.registrar);
+    it("should attest Bob (over 18, compliant user)", async function () {
+      // Bob: Born 1995 (offset 95), age 31 in 2026
+      const bobNameHash = ethers.keccak256(ethers.toUtf8Bytes("Bob Johnson"));
+      await attestUser(signers.bob.address, 95, bobNameHash, signers.registrar);
       expect(await identityRegistry.isAttested(signers.bob.address)).to.be.true;
+      expect(await identityRegistry.fullNameHashes(signers.bob.address)).to.eq(bobNameHash);
     });
 
-    it("should attest Charlie (blacklisted user)", async function () {
-      // Charlie: KYC level 1, but blacklisted
-      await attestUser(signers.charlie.address, 85, 840, 1, true, signers.registrar);
+    it("should attest Charlie (under 18, non-compliant user)", async function () {
+      // Charlie: Born 2010 (offset 110), age 16 in 2026
+      const charlieNameHash = ethers.keccak256(ethers.toUtf8Bytes("Charlie Brown"));
+      await attestUser(signers.charlie.address, 110, charlieNameHash, signers.registrar);
       expect(await identityRegistry.isAttested(signers.charlie.address)).to.be.true;
+      expect(await identityRegistry.fullNameHashes(signers.charlie.address)).to.eq(charlieNameHash);
+    });
+
+    it("should reject duplicate name hash", async function () {
+      const duplicateNameHash = ethers.keccak256(ethers.toUtf8Bytes("Duplicate Name"));
+
+      // First attestation should succeed
+      await attestUser(signers.alice.address, 90, duplicateNameHash, signers.registrar);
+
+      // Second attestation with same name hash should fail
+      const ethSigners = await ethers.getSigners();
+      const anotherUser = ethSigners[6];
+      await expect(
+        attestUser(anotherUser.address, 95, duplicateNameHash, signers.registrar),
+      ).to.be.revertedWithCustomError(identityRegistry, "DuplicateName");
     });
   });
 
@@ -153,7 +161,7 @@ describe("Full Integration Flow", function () {
   });
 
   describe("Compliance Checks", function () {
-    it("should pass compliance for Alice", async function () {
+    it("should pass compliance for Alice (over 18)", async function () {
       await complianceRules.connect(signers.alice).checkCompliance(signers.alice.address);
 
       const result = await complianceRules.connect(signers.alice).getComplianceResult(signers.alice.address);
@@ -162,7 +170,7 @@ describe("Full Integration Flow", function () {
       expect(isCompliant).to.be.true;
     });
 
-    it("should pass compliance for Bob", async function () {
+    it("should pass compliance for Bob (over 18)", async function () {
       await complianceRules.connect(signers.bob).checkCompliance(signers.bob.address);
 
       const result = await complianceRules.connect(signers.bob).getComplianceResult(signers.bob.address);
@@ -171,7 +179,7 @@ describe("Full Integration Flow", function () {
       expect(isCompliant).to.be.true;
     });
 
-    it("should fail compliance for Charlie (blacklisted)", async function () {
+    it("should fail compliance for Charlie (under 18)", async function () {
       await complianceRules.connect(signers.charlie).checkCompliance(signers.charlie.address);
 
       const result = await complianceRules.connect(signers.charlie).getComplianceResult(signers.charlie.address);
@@ -267,7 +275,7 @@ describe("Full Integration Flow", function () {
       ).to.be.revertedWithCustomError(token, "UnauthorizedCiphertext");
     });
 
-    it("should silently fail transfer to Charlie (blacklisted) - branch-free", async function () {
+    it("should silently fail transfer to Charlie (under 18) - branch-free", async function () {
       const aliceBalanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
       const aliceBalanceBeforeDecrypted = await fhevm.userDecryptEuint(
         FhevmType.euint64,
@@ -297,24 +305,6 @@ describe("Full Integration Flow", function () {
       );
 
       expect(aliceBalanceAfterDecrypted).to.equal(aliceBalanceBeforeDecrypted);
-    });
-  });
-
-  describe("Compliance Changes", function () {
-    it("should update min KYC level and affect compliance", async function () {
-      // Increase min KYC level to 3 (Bob has level 2)
-      await complianceRules.connect(signers.owner).setMinKycLevel(3);
-
-      // Bob should now fail compliance
-      await complianceRules.connect(signers.bob).checkCompliance(signers.bob.address);
-
-      const result = await complianceRules.connect(signers.bob).getComplianceResult(signers.bob.address);
-      const isCompliant = await fhevm.userDecryptEbool(result, complianceAddress, signers.bob);
-
-      expect(isCompliant).to.be.false;
-
-      // Reset for other tests
-      await complianceRules.connect(signers.owner).setMinKycLevel(1);
     });
   });
 });

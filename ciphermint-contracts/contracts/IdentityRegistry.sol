@@ -2,30 +2,31 @@
 // solhint-disable not-rely-on-time
 pragma solidity ^0.8.27;
 
-import {FHE, euint8, euint16, ebool, externalEuint8, externalEuint16, externalEbool} from "@fhevm/solidity/lib/FHE.sol";
+import {FHE, euint8, ebool, externalEuint8} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 import {IIdentityRegistry} from "./IIdentityRegistry.sol";
 
 /**
  * @title IdentityRegistry
  * @author Gustavo Valverde
- * @notice On-chain encrypted identity registry for KYC or compliance platforms
+ * @notice On-chain encrypted identity registry for age verification and name uniqueness
  * @dev Example for fhEVM Examples - Identity Category
  *
  * @custom:category identity
  * @custom:chapter identity,access-control
- * @custom:concept Storing encrypted identity attributes (euint8, euint16, ebool)
+ * @custom:concept Storing encrypted birth year and hashed name for age verification and duplicate prevention
  * @custom:difficulty intermediate
  *
  * This contract maintains an encrypted identity registry where authorized registrars
- * (typically a backend service) can attest to user identity attributes. All sensitive data
- * remains encrypted on-chain.
+ * (typically a backend service) can attest to user identity attributes. Birth year is
+ * stored encrypted for age verification, while name is stored as a hash for duplicate detection.
  *
  * Key patterns demonstrated:
- * 1. Multiple encrypted types (euint8, euint16, ebool)
- * 2. Role-based access control (registrars)
- * 3. Struct-like data storage with mappings
- * 4. FHE permission management (allowThis, allow)
+ * 1. Encrypted birth year (euint8) for age verification
+ * 2. Name hash (bytes32) for duplicate detection
+ * 3. Age verification using FHE comparisons (le, ge)
+ * 4. Role-based access control (registrars)
+ * 5. FHE permission management (allowThis, allow)
  */
 contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
     // ============ Encrypted Identity Attributes ============
@@ -33,19 +34,20 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
     /// @notice Encrypted birth year offset from 1900
     mapping(address user => euint8 birthYearOffset) private birthYearOffsets;
 
-    /// @notice Encrypted country code (ISO 3166-1 numeric)
-    mapping(address user => euint16 countryCode) private countryCodes;
+    /// @notice Hash of user's full name (not encrypted, bytes32)
+    mapping(address user => bytes32 fullNameHash) public fullNameHashes;
 
-    /// @notice Encrypted KYC verification level (0-5)
-    mapping(address user => euint8 kycLevel) private kycLevels;
+    /// @notice Reverse mapping: name hash to address (for duplicate detection)
+    mapping(bytes32 nameHash => address user) private nameHashToAddress;
 
-    /// @notice Encrypted blacklist status
-    mapping(address user => ebool blacklisted) private isBlacklisted;
+    /// @notice Current year offset from 1900 (e.g., 124 for 2024)
+    euint8 private currentYearOffset;
 
     /// @notice Timestamp of last attestation
     mapping(address user => uint256 timestamp) public attestationTimestamp;
 
-    /// @notice Store verification results for external queries
+    /// @notice Store age verification results for external queries
+    /// @dev Key is keccak256(user, minAge) to support multiple age thresholds
     mapping(bytes32 key => ebool result) private verificationResults;
 
     // ============ Access Control ============
@@ -60,6 +62,12 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
 
     /// @notice Thrown when caller lacks permission for encrypted data
     error AccessProhibited();
+
+    /// @notice Thrown when user has no registered birth year
+    error NotRegistered();
+
+    /// @notice Thrown when there is no stored verification result for a given threshold
+    error NoVerificationResult();
 
     // ============ Modifiers ============
 
@@ -79,6 +87,9 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
     constructor() {
         owner = msg.sender;
         registrars[msg.sender] = true;
+        // Initialize current year offset (e.g., 126 for 2026)
+        currentYearOffset = FHE.asEuint8(126);
+        FHE.allowThis(currentYearOffset);
         emit RegistrarAdded(msg.sender);
     }
 
@@ -102,33 +113,35 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
     function attestIdentity(
         address user,
         externalEuint8 encBirthYearOffset,
-        externalEuint16 encCountryCode,
-        externalEuint8 encKycLevel,
-        externalEbool encIsBlacklisted,
+        bytes32 nameHash,
         bytes calldata inputProof
     ) external onlyRegistrar {
-        // Convert and store encrypted values
+        // Check for duplicate name hash
+        address existingUser = nameHashToAddress[nameHash];
+        if (existingUser != address(0) && existingUser != user) {
+            revert DuplicateName();
+        }
+
+        // Convert and store encrypted birth year
         euint8 birthYear = FHE.fromExternal(encBirthYearOffset, inputProof);
-        euint16 country = FHE.fromExternal(encCountryCode, inputProof);
-        euint8 kyc = FHE.fromExternal(encKycLevel, inputProof);
-        ebool blacklisted = FHE.fromExternal(encIsBlacklisted, inputProof);
+
+        // If user already has an identity, clear the old name hash mapping
+        if (attestationTimestamp[user] > 0) {
+            bytes32 oldNameHash = fullNameHashes[user];
+            if (oldNameHash != bytes32(0) && oldNameHash != nameHash) {
+                delete nameHashToAddress[oldNameHash];
+            }
+        }
 
         birthYearOffsets[user] = birthYear;
-        countryCodes[user] = country;
-        kycLevels[user] = kyc;
-        isBlacklisted[user] = blacklisted;
+        fullNameHashes[user] = nameHash;
+        nameHashToAddress[nameHash] = user;
 
-        // Grant contract permission to all values
+        // Grant contract permission to encrypted value
         FHE.allowThis(birthYear);
-        FHE.allowThis(country);
-        FHE.allowThis(kyc);
-        FHE.allowThis(blacklisted);
 
         // Grant user permission to their own data
         FHE.allow(birthYear, user);
-        FHE.allow(country, user);
-        FHE.allow(kyc, user);
-        FHE.allow(blacklisted, user);
 
         attestationTimestamp[user] = block.timestamp;
 
@@ -139,11 +152,15 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
     function revokeIdentity(address user) external onlyRegistrar {
         if (attestationTimestamp[user] == 0) revert NotAttested();
 
+        // Clear name hash mapping
+        bytes32 nameHash = fullNameHashes[user];
+        if (nameHash != bytes32(0)) {
+            delete nameHashToAddress[nameHash];
+        }
+
         // Set encrypted values to encrypted zeros
         birthYearOffsets[user] = FHE.asEuint8(0);
-        countryCodes[user] = FHE.asEuint16(0);
-        kycLevels[user] = FHE.asEuint8(0);
-        isBlacklisted[user] = FHE.asEbool(false);
+        delete fullNameHashes[user];
         attestationTimestamp[user] = 0;
 
         emit IdentityRevoked(user);
@@ -158,118 +175,68 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
         return birthYearOffsets[user];
     }
 
+    // ============ Age Verification ============
+
     /// @inheritdoc IIdentityRegistry
-    function getCountryCode(address user) external view returns (euint16) {
-        if (attestationTimestamp[user] == 0) revert NotAttested();
-        if (!FHE.isSenderAllowed(countryCodes[user])) revert AccessProhibited();
-        return countryCodes[user];
+    function isAtLeastAge(address user, uint8 minAge) external returns (ebool) {
+        return _isAtLeastAge(user, minAge);
     }
 
     /// @inheritdoc IIdentityRegistry
-    function getKycLevel(address user) external view returns (euint8) {
-        if (attestationTimestamp[user] == 0) revert NotAttested();
-        if (!FHE.isSenderAllowed(kycLevels[user])) revert AccessProhibited();
-        return kycLevels[user];
+    function isOver18(address user) external returns (ebool) {
+        return _isAtLeastAge(user, 18);
     }
 
     /// @inheritdoc IIdentityRegistry
-    function getBlacklistStatus(address user) external view returns (ebool) {
-        if (attestationTimestamp[user] == 0) revert NotAttested();
-        if (!FHE.isSenderAllowed(isBlacklisted[user])) revert AccessProhibited();
-        return isBlacklisted[user];
-    }
-
-    // ============ Verification Helpers ============
-
-    /// @inheritdoc IIdentityRegistry
-    function hasMinKycLevel(address user, uint8 minLevel) external returns (ebool) {
-        if (attestationTimestamp[user] == 0) revert NotAttested();
-        if (!FHE.isSenderAllowed(kycLevels[user])) revert AccessProhibited();
-        ebool result = FHE.ge(kycLevels[user], FHE.asEuint8(minLevel));
-
-        // Store result for later retrieval
-        bytes32 key = keccak256(abi.encodePacked(user, uint8(0), uint256(minLevel)));
-        verificationResults[key] = result;
-
-        // Grant caller permission to decrypt the result
-        FHE.allowThis(result);
-        FHE.allow(result, msg.sender);
-
-        return result;
-    }
-
-    /// @inheritdoc IIdentityRegistry
-    function isFromCountry(address user, uint16 country) external returns (ebool) {
-        if (attestationTimestamp[user] == 0) revert NotAttested();
-        if (!FHE.isSenderAllowed(countryCodes[user])) revert AccessProhibited();
-        ebool result = FHE.eq(countryCodes[user], FHE.asEuint16(country));
-
-        // Store result for later retrieval
-        bytes32 key = keccak256(abi.encodePacked(user, uint8(1), uint256(country)));
-        verificationResults[key] = result;
-
-        // Grant caller permission to decrypt the result
-        FHE.allowThis(result);
-        FHE.allow(result, msg.sender);
-
-        return result;
-    }
-
-    /// @inheritdoc IIdentityRegistry
-    function isNotBlacklisted(address user) external returns (ebool) {
-        if (attestationTimestamp[user] == 0) revert NotAttested();
-        if (!FHE.isSenderAllowed(isBlacklisted[user])) revert AccessProhibited();
-        ebool result = FHE.not(isBlacklisted[user]);
-
-        // Store result for later retrieval
-        bytes32 key = keccak256(abi.encodePacked(user, uint8(2), uint256(0)));
-        verificationResults[key] = result;
-
-        // Grant caller permission to decrypt the result
-        FHE.allowThis(result);
-        FHE.allow(result, msg.sender);
-
-        return result;
-    }
-
-    // ============ Result Getters ============
-
-    /**
-     * @notice Get the last KYC level verification result
-     * @param user Address that was checked
-     * @param minLevel Level that was checked
-     * @return Encrypted boolean result
-     */
-    function getKycLevelResult(address user, uint8 minLevel) external view returns (ebool) {
-        bytes32 key = keccak256(abi.encodePacked(user, uint8(0), uint256(minLevel)));
+    function getVerificationResult(address user, uint8 minAge) external view returns (ebool) {
+        bytes32 key = keccak256(abi.encodePacked(user, minAge));
         ebool result = verificationResults[key];
-        if (!FHE.isSenderAllowed(result)) revert AccessProhibited();
+        if (!FHE.isInitialized(result)) {
+            revert NoVerificationResult();
+        }
         return result;
     }
 
     /**
-     * @notice Get the last country verification result
-     * @param user Address that was checked
-     * @param country Country code that was checked
-     * @return Encrypted boolean result
+     * @notice Internal implementation of age check
+     * @dev Separated to avoid external self-calls which don't work with staticCall
+     * @param user Address to check
+     * @param minAge Minimum age threshold
+     * @return meetsAge Encrypted boolean indicating if user meets the age requirement
      */
-    function getCountryResult(address user, uint16 country) external view returns (ebool) {
-        bytes32 key = keccak256(abi.encodePacked(user, uint8(1), uint256(country)));
-        ebool result = verificationResults[key];
-        if (!FHE.isSenderAllowed(result)) revert AccessProhibited();
-        return result;
+    function _isAtLeastAge(address user, uint8 minAge) internal returns (ebool meetsAge) {
+        if (attestationTimestamp[user] == 0) revert NotAttested();
+        if (!FHE.isInitialized(birthYearOffsets[user])) {
+            revert NotRegistered();
+        }
+
+        // Calculate: currentYearOffset - minAge
+        // This gives us the maximum birth year offset for someone to be minAge years old
+        euint8 maxBirthYearOffset = FHE.sub(currentYearOffset, FHE.asEuint8(minAge));
+
+        // User is at least minAge if their birth year offset <= maxBirthYearOffset
+        // (Earlier birth year = older person)
+        meetsAge = FHE.le(birthYearOffsets[user], maxBirthYearOffset);
+
+        // Store result for later retrieval
+        bytes32 key = keccak256(abi.encodePacked(user, minAge));
+        verificationResults[key] = meetsAge;
+
+        // Grant caller permission to decrypt the result
+        FHE.allowThis(meetsAge);
+        FHE.allow(meetsAge, msg.sender);
+
+        return meetsAge;
     }
 
     /**
-     * @notice Get the last blacklist verification result
-     * @param user Address that was checked
-     * @return Encrypted boolean result
+     * @notice Update the current year (owner only)
+     * @dev In production, this would use a trusted oracle or governance
+     * @param newOffset New year offset from 1900
      */
-    function getBlacklistResult(address user) external view returns (ebool) {
-        bytes32 key = keccak256(abi.encodePacked(user, uint8(2), uint256(0)));
-        ebool result = verificationResults[key];
-        if (!FHE.isSenderAllowed(result)) revert AccessProhibited();
-        return result;
+    function updateCurrentYear(uint8 newOffset) external onlyOwner {
+        currentYearOffset = FHE.asEuint8(newOffset);
+        FHE.allowThis(currentYearOffset);
     }
 
     // ============ Access Control ============
@@ -295,9 +262,6 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
         if (attestationTimestamp[msg.sender] == 0) revert NotAttested();
 
         FHE.allow(birthYearOffsets[msg.sender], grantee);
-        FHE.allow(countryCodes[msg.sender], grantee);
-        FHE.allow(kycLevels[msg.sender], grantee);
-        FHE.allow(isBlacklisted[msg.sender], grantee);
 
         emit AccessGranted(msg.sender, grantee);
     }

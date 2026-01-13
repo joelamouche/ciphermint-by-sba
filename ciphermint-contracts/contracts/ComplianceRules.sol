@@ -9,25 +9,24 @@ import {IIdentityRegistry} from "./IIdentityRegistry.sol";
 /**
  * @title ComplianceRules
  * @author Gustavo Valverde
- * @notice Combines multiple compliance checks using FHE operations
+ * @notice Checks age compliance using FHE operations
  * @dev Example for fhEVM Examples - Identity Category
  *
  * @custom:category identity
  * @custom:chapter compliance
- * @custom:concept Combining encrypted compliance checks with FHE.and()
+ * @custom:concept Encrypted age verification for compliance checks
  * @custom:difficulty intermediate
  * @custom:depends-on IdentityRegistry,IIdentityRegistry,CompliantERC20
- * @custom:deploy-plan [{"contract":"IdentityRegistry","saveAs":"registry"},{"contract":"ComplianceRules","saveAs":"complianceRules","args":["@registry",1]},{"contract":"CompliantERC20","saveAs":"token","args":["Compliant Token","CPL","@complianceRules"],"afterDeploy":["await complianceRules.setAuthorizedCaller(await token.getAddress(), true);","console.log(\"Authorized CompliantERC20 as compliance caller:\", await token.getAddress());"]}]
+ * @custom:deploy-plan [{"contract":"IdentityRegistry","saveAs":"registry"},{"contract":"ComplianceRules","saveAs":"complianceRules","args":["@registry"]},{"contract":"CompliantERC20","saveAs":"token","args":["Compliant Token","CPL","@complianceRules"],"afterDeploy":["await complianceRules.setAuthorizedCaller(await token.getAddress(), true);","console.log(\"Authorized CompliantERC20 as compliance caller:\", await token.getAddress());"]}]
  *
- * This contract aggregates compliance checks from IdentityRegistry and returns
+ * This contract checks age compliance from IdentityRegistry and returns
  * encrypted boolean results. Consumer contracts (like CompliantERC20) can use
  * these results with FHE.select() for branch-free logic.
  *
  * Key patterns demonstrated:
- * 1. FHE.and() for combining multiple encrypted conditions
+ * 1. Encrypted age verification (isOver18)
  * 2. Integration with IdentityRegistry
- * 3. Configurable compliance parameters
- * 4. Encrypted result caching
+ * 3. Encrypted result caching
  */
 contract ComplianceRules is ZamaEthereumConfig {
     // solhint-enable max-line-length
@@ -41,9 +40,6 @@ contract ComplianceRules is ZamaEthereumConfig {
     /// @notice Pending owner for two-step ownership transfer
     address public pendingOwner;
 
-    /// @notice Minimum KYC level required for compliance
-    uint8 public minKycLevel;
-
     /// @notice Store last compliance check result for each user
     mapping(address user => ebool result) private complianceResults;
 
@@ -51,10 +47,6 @@ contract ComplianceRules is ZamaEthereumConfig {
     mapping(address caller => bool authorized) public authorizedCallers;
 
     // ============ Events ============
-
-    /// @notice Emitted when the minimum KYC level requirement is updated
-    /// @param newLevel The new minimum KYC level required for compliance
-    event MinKycLevelUpdated(uint8 indexed newLevel);
 
     /// @notice Emitted when a compliance check is performed for a user
     /// @param user Address of the user whose compliance was checked
@@ -112,25 +104,14 @@ contract ComplianceRules is ZamaEthereumConfig {
     /**
      * @notice Initialize with identity registry reference
      * @param registry Address of the IdentityRegistry contract
-     * @param initialMinKycLevel Initial minimum KYC level (default: 1)
      */
-    constructor(address registry, uint8 initialMinKycLevel) {
+    constructor(address registry) {
         if (registry == address(0)) revert RegistryNotSet();
         identityRegistry = IIdentityRegistry(registry);
         owner = msg.sender;
-        minKycLevel = initialMinKycLevel;
     }
 
     // ============ Admin Functions ============
-
-    /**
-     * @notice Update minimum KYC level
-     * @param newLevel New minimum level
-     */
-    function setMinKycLevel(uint8 newLevel) external onlyOwner {
-        minKycLevel = newLevel;
-        emit MinKycLevelUpdated(newLevel);
-    }
 
     /**
      * @notice Allow or revoke a caller to check compliance for other users
@@ -167,13 +148,13 @@ contract ComplianceRules is ZamaEthereumConfig {
 
     /**
      * @notice Check if user passes all compliance requirements
-     * @dev Combines: hasMinKycLevel AND isNotBlacklisted
+     * @dev Checks: isAttested AND isOver18
      * @param user Address to check
      * @return Encrypted boolean indicating compliance status
      *
      * Note: This function makes external calls to IdentityRegistry which
-     * computes and stores verification results. The combined result is
-     * stored locally for later retrieval.
+     * computes and stores verification results. The result is stored locally
+     * for later retrieval.
      */
     function checkCompliance(address user) external onlyAuthorizedOrSelf(user) returns (ebool) {
         // Check if user is attested
@@ -185,56 +166,17 @@ contract ComplianceRules is ZamaEthereumConfig {
             return notAttestedResult;
         }
 
-        // Get individual compliance checks
-        ebool hasKyc = identityRegistry.hasMinKycLevel(user, minKycLevel);
-        ebool notBlacklisted = identityRegistry.isNotBlacklisted(user);
-
-        // Combine all conditions
-        ebool result = FHE.and(hasKyc, notBlacklisted);
+        // Check if user is over 18
+        ebool isOver18 = identityRegistry.isOver18(user);
 
         // Store and grant permissions
-        complianceResults[user] = result;
-        FHE.allowThis(result);
-        FHE.allow(result, msg.sender);
+        complianceResults[user] = isOver18;
+        FHE.allowThis(isOver18);
+        FHE.allow(isOver18, msg.sender);
 
         emit ComplianceChecked(user);
 
-        return result;
-    }
-
-    /**
-     * @notice Check compliance with additional country restriction
-     * @param user Address to check
-     * @param allowedCountry Country code that is allowed
-     * @return Encrypted boolean indicating compliance status
-     */
-    function checkComplianceWithCountry(
-        address user,
-        uint16 allowedCountry
-    ) external onlyAuthorizedOrSelf(user) returns (ebool) {
-        // Check if user is attested
-        if (!identityRegistry.isAttested(user)) {
-            ebool notAttestedResult = FHE.asEbool(false);
-            FHE.allowThis(notAttestedResult);
-            FHE.allow(notAttestedResult, msg.sender);
-            return notAttestedResult;
-        }
-
-        // Get individual compliance checks
-        ebool hasKyc = identityRegistry.hasMinKycLevel(user, minKycLevel);
-        ebool notBlacklisted = identityRegistry.isNotBlacklisted(user);
-        ebool isFromAllowedCountry = identityRegistry.isFromCountry(user, allowedCountry);
-
-        // Combine all conditions
-        ebool result = FHE.and(FHE.and(hasKyc, notBlacklisted), isFromAllowedCountry);
-
-        // Grant permissions
-        FHE.allowThis(result);
-        FHE.allow(result, msg.sender);
-
-        emit ComplianceChecked(user);
-
-        return result;
+        return isOver18;
     }
 
     /**

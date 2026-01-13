@@ -25,28 +25,16 @@ async function attestUser(
   contractAddress: string,
   userAddress: string,
   birthYearOffset: number,
-  countryCode: number,
-  kycLevel: number,
-  isBlacklisted: boolean,
+  nameHash: string,
   signer: HardhatEthersSigner,
 ) {
   const encrypted = fhevm.createEncryptedInput(contractAddress, signer.address);
   encrypted.add8(birthYearOffset);
-  encrypted.add16(countryCode);
-  encrypted.add8(kycLevel);
-  encrypted.addBool(isBlacklisted);
   const encryptedInput = await encrypted.encrypt();
 
   const tx = await contract
     .connect(signer)
-    .attestIdentity(
-      userAddress,
-      encryptedInput.handles[0],
-      encryptedInput.handles[1],
-      encryptedInput.handles[2],
-      encryptedInput.handles[3],
-      encryptedInput.inputProof,
-    );
+    .attestIdentity(userAddress, encryptedInput.handles[0], nameHash, encryptedInput.inputProof);
   await tx.wait();
 }
 
@@ -54,8 +42,8 @@ async function attestUser(
  * IdentityRegistry Tests
  *
  * Tests for the on-chain encrypted identity registry.
- * Demonstrates encrypted identity attributes, role-based access control,
- * and verification patterns using FHE operations.
+ * Demonstrates encrypted birth year for age verification, name hash for duplicate detection,
+ * role-based access control, and verification patterns using FHE operations.
  */
 describe("IdentityRegistry", function () {
   let signers: Signers;
@@ -132,19 +120,19 @@ describe("IdentityRegistry", function () {
     });
 
     it("should allow registrar to attest identity", async function () {
-      // Birth year 1990 (offset 90), USA (840), KYC level 3, not blacklisted
+      // Birth year 1990 (offset 90), name hash for "John Doe"
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("John Doe"));
       await attestUser(
         identityRegistry,
         identityRegistryAddress,
         signers.user1.address,
         90,
-        840,
-        3,
-        false,
+        nameHash,
         signers.registrar,
       );
 
       expect(await identityRegistry.isAttested(signers.user1.address)).to.be.true;
+      expect(await identityRegistry.fullNameHashes(signers.user1.address)).to.eq(nameHash);
 
       const timestamp = await identityRegistry.attestationTimestamp(signers.user1.address);
       expect(timestamp).to.be.greaterThan(0);
@@ -152,23 +140,14 @@ describe("IdentityRegistry", function () {
 
     it("should emit IdentityAttested event", async function () {
       const encrypted = fhevm.createEncryptedInput(identityRegistryAddress, signers.registrar.address);
-      encrypted.add8(100);
-      encrypted.add16(276); // Austria
-      encrypted.add8(2);
-      encrypted.addBool(false);
+      encrypted.add8(100); // Birth year 2000 (offset 100)
       const encryptedInput = await encrypted.encrypt();
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("Jane Smith"));
 
       await expect(
         identityRegistry
           .connect(signers.registrar)
-          .attestIdentity(
-            signers.user2.address,
-            encryptedInput.handles[0],
-            encryptedInput.handles[1],
-            encryptedInput.handles[2],
-            encryptedInput.handles[3],
-            encryptedInput.inputProof,
-          ),
+          .attestIdentity(signers.user2.address, encryptedInput.handles[0], nameHash, encryptedInput.inputProof),
       )
         .to.emit(identityRegistry, "IdentityAttested")
         .withArgs(signers.user2.address, signers.registrar.address);
@@ -177,23 +156,62 @@ describe("IdentityRegistry", function () {
     it("should revert when non-registrar tries to attest", async function () {
       const encrypted = fhevm.createEncryptedInput(identityRegistryAddress, signers.user1.address);
       encrypted.add8(100);
-      encrypted.add16(840);
-      encrypted.add8(1);
-      encrypted.addBool(false);
       const encryptedInput = await encrypted.encrypt();
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("Test User"));
 
       await expect(
         identityRegistry
           .connect(signers.user1)
-          .attestIdentity(
-            signers.verifier.address,
-            encryptedInput.handles[0],
-            encryptedInput.handles[1],
-            encryptedInput.handles[2],
-            encryptedInput.handles[3],
-            encryptedInput.inputProof,
-          ),
+          .attestIdentity(signers.verifier.address, encryptedInput.handles[0], nameHash, encryptedInput.inputProof),
       ).to.be.revertedWithCustomError(identityRegistry, "OnlyRegistrar");
+    });
+
+    it("should revert when duplicate name hash is detected", async function () {
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("Duplicate Name"));
+
+      // First attestation should succeed
+      await attestUser(
+        identityRegistry,
+        identityRegistryAddress,
+        signers.user1.address,
+        90,
+        nameHash,
+        signers.registrar,
+      );
+
+      // Second attestation with same name hash should fail
+      await expect(
+        attestUser(identityRegistry, identityRegistryAddress, signers.user2.address, 100, nameHash, signers.registrar),
+      ).to.be.revertedWithCustomError(identityRegistry, "DuplicateName");
+    });
+
+    it("should allow same user to update their identity with different name", async function () {
+      const nameHash1 = ethers.keccak256(ethers.toUtf8Bytes("Original Name"));
+      const nameHash2 = ethers.keccak256(ethers.toUtf8Bytes("Updated Name"));
+
+      // First attestation
+      await attestUser(
+        identityRegistry,
+        identityRegistryAddress,
+        signers.user1.address,
+        90,
+        nameHash1,
+        signers.registrar,
+      );
+
+      expect(await identityRegistry.fullNameHashes(signers.user1.address)).to.eq(nameHash1);
+
+      // Update with different name should succeed
+      await attestUser(
+        identityRegistry,
+        identityRegistryAddress,
+        signers.user1.address,
+        90,
+        nameHash2,
+        signers.registrar,
+      );
+
+      expect(await identityRegistry.fullNameHashes(signers.user1.address)).to.eq(nameHash2);
     });
   });
 
@@ -202,29 +220,15 @@ describe("IdentityRegistry", function () {
     beforeEach(async function () {
       // Add registrar and attest user1
       await identityRegistry.connect(signers.owner).addRegistrar(signers.registrar.address);
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("John Doe"));
       await attestUser(
         identityRegistry,
         identityRegistryAddress,
         signers.user1.address,
         90,
-        840,
-        3,
-        false,
+        nameHash,
         signers.registrar,
       );
-    });
-
-    it("should allow user to read their own KYC level", async function () {
-      const encryptedKyc = await identityRegistry.connect(signers.user1).getKycLevel(signers.user1.address);
-
-      const kycLevel = await fhevm.userDecryptEuint(
-        FhevmType.euint8,
-        encryptedKyc,
-        identityRegistryAddress,
-        signers.user1,
-      );
-
-      expect(kycLevel).to.eq(3n);
     });
 
     it("should allow user to read their own birth year offset", async function () {
@@ -242,27 +246,10 @@ describe("IdentityRegistry", function () {
       expect(birthYearOffset).to.eq(90n);
     });
 
-    it("should allow user to read their own country code", async function () {
-      const encryptedCountry = await identityRegistry.connect(signers.user1).getCountryCode(signers.user1.address);
-
-      const countryCode = await fhevm.userDecryptEuint(
-        FhevmType.euint16,
-        encryptedCountry,
-        identityRegistryAddress,
-        signers.user1,
-      );
-
-      expect(countryCode).to.eq(840n);
-    });
-
-    it("should allow user to read their own blacklist status", async function () {
-      const encryptedBlacklist = await identityRegistry
-        .connect(signers.user1)
-        .getBlacklistStatus(signers.user1.address);
-
-      const isBlacklisted = await fhevm.userDecryptEbool(encryptedBlacklist, identityRegistryAddress, signers.user1);
-
-      expect(isBlacklisted).to.be.false;
+    it("should allow user to read their own name hash", async function () {
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("John Doe"));
+      const storedNameHash = await identityRegistry.fullNameHashes(signers.user1.address);
+      expect(storedNameHash).to.eq(nameHash);
     });
 
     it("should revert for non-attested users", async function () {
@@ -275,90 +262,110 @@ describe("IdentityRegistry", function () {
 
     it("should revert when accessing data without permission", async function () {
       await expect(
-        identityRegistry.connect(signers.verifier).getKycLevel(signers.user1.address),
+        identityRegistry.connect(signers.verifier).getBirthYearOffset(signers.user1.address),
       ).to.be.revertedWithCustomError(identityRegistry, "AccessProhibited");
     });
   });
 
-  // ✅ Verification Helpers Tests
-  describe("Verification Helpers", function () {
+  // ✅ Age Verification Tests
+  describe("Age Verification", function () {
     beforeEach(async function () {
-      // Add registrar and attest user1
+      // Add registrar and attest user1 (born 1990, age 36 in 2026)
       await identityRegistry.connect(signers.owner).addRegistrar(signers.registrar.address);
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("John Doe"));
       await attestUser(
         identityRegistry,
         identityRegistryAddress,
         signers.user1.address,
-        90,
-        840,
-        3,
-        false,
+        90, // Birth year 1990 (offset 90)
+        nameHash,
         signers.registrar,
       );
     });
 
-    it("should check minimum KYC level correctly", async function () {
-      await identityRegistry.connect(signers.user1).hasMinKycLevel(signers.user1.address, 2);
+    it("should verify user is at least 18 years old", async function () {
+      // Call function to compute and store result (also sets permissions)
+      await identityRegistry.connect(signers.user1).isOver18(signers.user1.address);
 
-      const encryptedHasMinKyc = await identityRegistry
+      // Get stored result via view function
+      const encryptedResult = await identityRegistry
         .connect(signers.user1)
-        .getKycLevelResult(signers.user1.address, 2);
+        .getVerificationResult(signers.user1.address, 18);
 
-      const hasMinKyc = await fhevm.userDecryptEbool(encryptedHasMinKyc, identityRegistryAddress, signers.user1);
+      // Decrypt using userDecryptEbool (permissions were set by the call)
+      const isOver18 = await fhevm.userDecryptEbool(encryptedResult, identityRegistryAddress, signers.user1);
 
-      expect(hasMinKyc).to.be.true;
+      expect(isOver18).to.be.true;
     });
 
-    it("should fail KYC check when level is insufficient", async function () {
-      await identityRegistry.connect(signers.user1).hasMinKycLevel(signers.user1.address, 5);
+    it("should verify user is at least specified age", async function () {
+      // Call function to compute and store result (also sets permissions)
+      await identityRegistry.connect(signers.user1).isAtLeastAge(signers.user1.address, 30);
 
-      const encryptedHasMinKyc = await identityRegistry
+      // Get stored result via view function
+      const encryptedResult = await identityRegistry
         .connect(signers.user1)
-        .getKycLevelResult(signers.user1.address, 5);
+        .getVerificationResult(signers.user1.address, 30);
 
-      const hasMinKyc = await fhevm.userDecryptEbool(encryptedHasMinKyc, identityRegistryAddress, signers.user1);
+      // Decrypt using userDecryptEbool (permissions were set by the call)
+      const isAtLeast30 = await fhevm.userDecryptEbool(encryptedResult, identityRegistryAddress, signers.user1);
 
-      expect(hasMinKyc).to.be.false;
+      expect(isAtLeast30).to.be.true;
     });
 
-    it("should check country match correctly", async function () {
-      await identityRegistry.connect(signers.user1).isFromCountry(signers.user1.address, 840);
-
-      const encryptedCountryMatch = await identityRegistry
-        .connect(signers.user1)
-        .getCountryResult(signers.user1.address, 840);
-
-      const isFromCountry = await fhevm.userDecryptEbool(encryptedCountryMatch, identityRegistryAddress, signers.user1);
-
-      expect(isFromCountry).to.be.true;
-    });
-
-    it("should fail country check when country doesn't match", async function () {
-      await identityRegistry.connect(signers.user1).isFromCountry(signers.user1.address, 276);
-
-      const encryptedCountryMatch = await identityRegistry
-        .connect(signers.user1)
-        .getCountryResult(signers.user1.address, 276);
-
-      const isFromCountry = await fhevm.userDecryptEbool(encryptedCountryMatch, identityRegistryAddress, signers.user1);
-
-      expect(isFromCountry).to.be.false;
-    });
-
-    it("should check not-blacklisted status", async function () {
-      await identityRegistry.connect(signers.user1).isNotBlacklisted(signers.user1.address);
-
-      const encryptedNotBlacklisted = await identityRegistry
-        .connect(signers.user1)
-        .getBlacklistResult(signers.user1.address);
-
-      const isNotBlacklisted = await fhevm.userDecryptEbool(
-        encryptedNotBlacklisted,
+    it("should fail age check when user is too young", async function () {
+      // Attest user2 born in 2010 (offset 110, age 16 in 2026)
+      const nameHash2 = ethers.keccak256(ethers.toUtf8Bytes("Young User"));
+      await attestUser(
+        identityRegistry,
         identityRegistryAddress,
-        signers.user1,
+        signers.user2.address,
+        110, // Birth year 2010 (offset 110)
+        nameHash2,
+        signers.registrar,
       );
 
-      expect(isNotBlacklisted).to.be.true;
+      // Call function to compute and store result (also sets permissions)
+      await identityRegistry.connect(signers.user2).isOver18(signers.user2.address);
+
+      // Get stored result via view function
+      const encryptedResult = await identityRegistry
+        .connect(signers.user2)
+        .getVerificationResult(signers.user2.address, 18);
+
+      // Decrypt using userDecryptEbool (permissions were set by the call)
+      const isOver18 = await fhevm.userDecryptEbool(encryptedResult, identityRegistryAddress, signers.user2);
+
+      expect(isOver18).to.be.false;
+    });
+
+    it("should allow retrieving stored verification result", async function () {
+      // First compute the verification
+      await identityRegistry.connect(signers.user1).isOver18(signers.user1.address);
+
+      // Then retrieve the stored result
+      const encryptedResult = await identityRegistry
+        .connect(signers.user1)
+        .getVerificationResult(signers.user1.address, 18);
+
+      const isOver18 = await fhevm.userDecryptEbool(encryptedResult, identityRegistryAddress, signers.user1);
+
+      expect(isOver18).to.be.true;
+    });
+
+    it("should revert when retrieving non-existent verification result", async function () {
+      await expect(
+        identityRegistry.connect(signers.user1).getVerificationResult(signers.user1.address, 21),
+      ).to.be.revertedWithCustomError(identityRegistry, "NoVerificationResult");
+    });
+
+    it("should revert when checking age for non-attested user", async function () {
+      const unattested = (await ethers.getSigners())[5];
+
+      await expect(identityRegistry.connect(unattested).isOver18(unattested.address)).to.be.revertedWithCustomError(
+        identityRegistry,
+        "NotAttested",
+      );
     });
   });
 
@@ -367,21 +374,20 @@ describe("IdentityRegistry", function () {
     beforeEach(async function () {
       // Add registrar and attest user1
       await identityRegistry.connect(signers.owner).addRegistrar(signers.registrar.address);
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("John Doe"));
       await attestUser(
         identityRegistry,
         identityRegistryAddress,
         signers.user1.address,
         90,
-        840,
-        3,
-        false,
+        nameHash,
         signers.registrar,
       );
     });
 
     it("should block verifier from reading user data without grant", async function () {
       await expect(
-        identityRegistry.connect(signers.verifier).getKycLevel(signers.user1.address),
+        identityRegistry.connect(signers.verifier).getBirthYearOffset(signers.user1.address),
       ).to.be.revertedWithCustomError(identityRegistry, "AccessProhibited");
     });
 
@@ -396,16 +402,18 @@ describe("IdentityRegistry", function () {
       await identityRegistry.connect(signers.user1).grantAccessTo(signers.verifier.address);
 
       // Then verify access
-      const encryptedKyc = await identityRegistry.connect(signers.verifier).getKycLevel(signers.user1.address);
+      const encryptedBirthYear = await identityRegistry
+        .connect(signers.verifier)
+        .getBirthYearOffset(signers.user1.address);
 
-      const kycLevel = await fhevm.userDecryptEuint(
+      const birthYearOffset = await fhevm.userDecryptEuint(
         FhevmType.euint8,
-        encryptedKyc,
+        encryptedBirthYear,
         identityRegistryAddress,
         signers.verifier,
       );
 
-      expect(kycLevel).to.eq(3n);
+      expect(birthYearOffset).to.eq(90n);
     });
   });
 
@@ -414,14 +422,13 @@ describe("IdentityRegistry", function () {
     beforeEach(async function () {
       // Add registrar and attest user2
       await identityRegistry.connect(signers.owner).addRegistrar(signers.registrar.address);
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("Jane Smith"));
       await attestUser(
         identityRegistry,
         identityRegistryAddress,
         signers.user2.address,
         100,
-        276,
-        2,
-        false,
+        nameHash,
         signers.registrar,
       );
     });
@@ -429,11 +436,15 @@ describe("IdentityRegistry", function () {
     it("should allow registrar to revoke identity", async function () {
       expect(await identityRegistry.isAttested(signers.user2.address)).to.be.true;
 
+      const nameHash = ethers.keccak256(ethers.toUtf8Bytes("Jane Smith"));
+      expect(await identityRegistry.fullNameHashes(signers.user2.address)).to.eq(nameHash);
+
       await expect(identityRegistry.connect(signers.registrar).revokeIdentity(signers.user2.address))
         .to.emit(identityRegistry, "IdentityRevoked")
         .withArgs(signers.user2.address);
 
       expect(await identityRegistry.isAttested(signers.user2.address)).to.be.false;
+      expect(await identityRegistry.fullNameHashes(signers.user2.address)).to.eq(ethers.ZeroHash);
     });
 
     it("should revert when revoking non-attested user", async function () {
@@ -442,6 +453,22 @@ describe("IdentityRegistry", function () {
       await expect(
         identityRegistry.connect(signers.registrar).revokeIdentity(unattested.address),
       ).to.be.revertedWithCustomError(identityRegistry, "NotAttested");
+    });
+  });
+
+  // 📅 Current Year Update Tests
+  describe("Current Year Update", function () {
+    it("should allow owner to update current year", async function () {
+      // Update to year 2027 (offset 127)
+      await identityRegistry.connect(signers.owner).updateCurrentYear(127);
+      // No event is emitted, but we can verify by checking age verification still works
+    });
+
+    it("should revert when non-owner tries to update current year", async function () {
+      await expect(identityRegistry.connect(signers.user1).updateCurrentYear(127)).to.be.revertedWithCustomError(
+        identityRegistry,
+        "OnlyOwner",
+      );
     });
   });
 

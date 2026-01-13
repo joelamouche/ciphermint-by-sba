@@ -4,7 +4,7 @@ A Confidential RWA POC by Stevens Blockchain Advisory
 ## MVP Summary — Phase 1
 
 **Product:** Confidential compliant ERC-20 on Zama FHEVM
-**Goal:** Show a PoC where *any verified human can mint 100 tokens*, no name collisions, and confidential transfers only between verified holders.
+**Goal:** Show a PoC where *any verified human (age >= 18) with a unique name can mint 100 tokens*, no name collisions, and confidential transfers only between verified holders.
 
 **Key principles**
 
@@ -151,12 +151,14 @@ sequenceDiagram
 
 * `mint(address to)`:
 
-  * Only if `IdentityRegistry.hasName(to)` == true
+  * Only if `IdentityRegistry.isAttested(to)` == true
+  * Only if `IdentityRegistry.isAtLeastAge(to, 18)` == true (encrypted check)
+  * Only if name is unique (enforced on-chain via name hash)
   * Only once per identity (or per address)
 * `transfer(from, to, amount)`:
 
-  * Only to addresses with `IdentityRegistry.hasName(to)` == true
-* No PII on-chain — only public encrypted name existence and hashed flags.
+  * Only to addresses with `IdentityRegistry.isAttested(to)` == true
+* No PII on-chain — only encrypted birth year and hashed name (bytes32).
 
 ---
 

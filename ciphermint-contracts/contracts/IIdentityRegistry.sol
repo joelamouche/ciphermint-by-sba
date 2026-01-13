@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {euint8, euint16, ebool, externalEuint8, externalEuint16, externalEbool} from "@fhevm/solidity/lib/FHE.sol";
+import {euint8, ebool, externalEuint8} from "@fhevm/solidity/lib/FHE.sol";
 
 /**
  * @title IIdentityRegistry
@@ -25,6 +25,9 @@ interface IIdentityRegistry {
 
     /// @notice Thrown when caller is not the pending owner
     error OnlyPendingOwner();
+
+    /// @notice Thrown when a duplicate name hash is detected
+    error DuplicateName();
 
     // ============ Events ============
 
@@ -75,16 +78,12 @@ interface IIdentityRegistry {
     /// @notice Attest identity attributes for a user
     /// @param user Address of the user
     /// @param encBirthYearOffset Encrypted birth year offset from 1900
-    /// @param encCountryCode Encrypted country code (ISO 3166-1 numeric)
-    /// @param encKycLevel Encrypted KYC verification level (0-5)
-    /// @param encIsBlacklisted Encrypted blacklist status
+    /// @param nameHash Hash of the user's full name (bytes32, not encrypted)
     /// @param inputProof Proof for external encrypted values
     function attestIdentity(
         address user,
         externalEuint8 encBirthYearOffset,
-        externalEuint16 encCountryCode,
-        externalEuint8 encKycLevel,
-        externalEbool encIsBlacklisted,
+        bytes32 nameHash,
         bytes calldata inputProof
     ) external;
 
@@ -99,39 +98,24 @@ interface IIdentityRegistry {
     /// @return Encrypted birth year offset
     function getBirthYearOffset(address user) external view returns (euint8);
 
-    /// @notice Get encrypted country code for a user
-    /// @param user Address of the user
-    /// @return Encrypted country code
-    function getCountryCode(address user) external view returns (euint16);
+    // ============ Age Verification ============
 
-    /// @notice Get encrypted KYC level for a user
-    /// @param user Address of the user
-    /// @return Encrypted KYC level
-    function getKycLevel(address user) external view returns (euint8);
+    /// @notice Check if user is at least the specified age
+    /// @param user Address to check
+    /// @param minAge Minimum age threshold (plaintext, e.g., 18)
+    /// @return Encrypted boolean (caller must have permission to decrypt)
+    function isAtLeastAge(address user, uint8 minAge) external returns (ebool);
 
-    /// @notice Get encrypted blacklist status for a user
-    /// @param user Address of the user
-    /// @return Encrypted blacklist status
-    function getBlacklistStatus(address user) external view returns (ebool);
+    /// @notice Convenience function to check if user is over 18
+    /// @param user Address to check
+    /// @return Encrypted boolean indicating if user is 18 or older
+    function isOver18(address user) external returns (ebool);
 
-    // ============ Verification Helpers ============
-
-    /// @notice Check if user has minimum KYC level
-    /// @param user Address of the user
-    /// @param minLevel Minimum KYC level required
-    /// @return Encrypted boolean result
-    function hasMinKycLevel(address user, uint8 minLevel) external returns (ebool);
-
-    /// @notice Check if user is from a specific country
-    /// @param user Address of the user
-    /// @param country Country code to check
-    /// @return Encrypted boolean result
-    function isFromCountry(address user, uint16 country) external returns (ebool);
-
-    /// @notice Check if user is not blacklisted
-    /// @param user Address of the user
-    /// @return Encrypted boolean result
-    function isNotBlacklisted(address user) external returns (ebool);
+    /// @notice Get the last verification result for a user and age threshold
+    /// @param user Address that was checked
+    /// @param minAge Age threshold that was used
+    /// @return Encrypted boolean result (caller must have permission to decrypt)
+    function getVerificationResult(address user, uint8 minAge) external view returns (ebool);
 
     // ============ Access Control ============
 
