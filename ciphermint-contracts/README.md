@@ -1,6 +1,6 @@
 # CipherMint Smart Contracts
 
-Smart contracts for CipherMint - a confidential compliant ERC-20 token built on Zama FHEVM. This package contains the IdentityRegistry and CompliantERC20 contracts that enable private token transfers between verified holders while maintaining compliance.
+Smart contracts for CipherMint - a confidential compliant ERC-20 token built on Zama FHEVM. This package contains the IdentityRegistry, ComplianceRules, and CompliantERC20 contracts that enable private token transfers between verified holders while maintaining compliance.
 
 ## Quick Start
 
@@ -72,9 +72,12 @@ For FHEVM development details, see:
 ciphermint-contracts/
 ├── contracts/           # Smart contract source files
 │   ├── IdentityRegistry.sol  # Identity verification registry
-│   └── CompliantERC20.sol    # Confidential ERC-20 token contract
+│   ├── ComplianceRules.sol    # Compliance checking rules engine
+│   └── CompliantERC20.sol     # Confidential ERC-20 token contract
 ├── deploy/              # Deployment scripts
 ├── test/                # Test files
+│   ├── IdentityRegistry.ts    # IdentityRegistry unit tests
+│   └── FullCompliantTokenIntegration.ts  # Full integration tests
 ├── hardhat.config.ts    # Hardhat configuration
 └── package.json         # Dependencies and scripts
 ```
