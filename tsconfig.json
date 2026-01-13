@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "composite": false,
+    "skipLibCheck": true,
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  },
+  "files": [],
+  "references": [{ "path": "./ciphermint-contracts" }],
+  "include": ["ciphermint-contracts/**/*"]
+}
