@@ -1,0 +1,22 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model SiweNonce {
+  id           String   @id @default(uuid())
+  nonce        String
+  walletAddress String
+  expiresAt    DateTime
+  used         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@unique([nonce, walletAddress])
+  @@index([nonce])
+  @@index([walletAddress])
+  @@index([expiresAt])
+}
