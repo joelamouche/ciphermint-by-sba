@@ -1,11 +1,14 @@
+import crypto from "crypto";
+
 /**
  * Didit API Client
  *
- * Implements Didit \"Create Session\" using v3 API.
+ * Implements Didit "Create Session" using v3 API, and webhook signature helpers.
  *
  * Docs:
  * - API authentication: https://docs.didit.me/reference/api-authentication
  * - Create Session v3: https://docs.didit.me/reference/create-session-verification-sessions
+ * - Webhooks: https://docs.didit.me/reference/webhooks
  */
 
 interface CreateDiditSessionRequest {
@@ -17,7 +20,7 @@ interface CreateDiditSessionRequest {
   encryptionKey?: string;
 }
 
-interface CreateDiditSessionResponse {
+export interface CreateDiditSessionResponse {
   sessionId: string;
   sessionUrl: string;
 }
@@ -110,4 +113,51 @@ export async function createDiditSession(
     sessionId,
     sessionUrl,
   };
+}
+
+/**
+ * Verify Didit webhook using X-Signature-Simple method.
+ *
+ * Docs: https://docs.didit.me/reference/webhooks
+ *
+ * Signature format:
+ *   HMAC_SHA256(secret, `${timestamp}:${session_id}:${status}:${webhook_type}`)
+ */
+export function verifyDiditSimpleSignature(params: {
+  signature: string | null | undefined;
+  timestamp: string | null | undefined;
+  sessionId: string | null | undefined;
+  status: string | null | undefined;
+  webhookType: string | null | undefined;
+  secret: string | null | undefined;
+}): boolean {
+  const { signature, timestamp, sessionId, status, webhookType, secret } =
+    params;
+
+  if (!signature || !timestamp || !sessionId || !status || !webhookType) {
+    return false;
+  }
+
+  if (!secret) {
+    console.warn(
+      "DIDIT_WEBHOOK_SECRET not set, cannot verify Didit webhook signature"
+    );
+    return false;
+  }
+
+  const message = `${timestamp}:${sessionId}:${status}:${webhookType}`;
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(message)
+    .digest("hex");
+
+  // Constant-time comparison
+  const sigBuf = Buffer.from(signature, "utf8");
+  const expBuf = Buffer.from(expected, "utf8");
+
+  if (sigBuf.length !== expBuf.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(sigBuf, expBuf);
 }

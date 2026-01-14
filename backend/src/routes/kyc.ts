@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { verifySiwe } from "../lib/siwe";
-import { createDiditSession } from "../lib/didit";
+import { createDiditSession, verifyDiditSimpleSignature } from "../lib/didit";
 
 const router = Router();
 
@@ -99,6 +99,152 @@ router.post("/session", async (req: Request, res: Response) => {
     res.status(500).json({
       error: "Internal server error",
     });
+  }
+});
+
+/**
+ * POST /api/kyc/webhook
+ * Didit webhook callback (no JWT)
+ *
+ * Validates Didit webhook signature using X-Signature-Simple and updates
+ * the corresponding KYC session status.
+ */
+router.post("/webhook", async (req: Request, res: Response) => {
+  try {
+    const body = req.body as {
+      session_id?: string;
+      status?: string;
+      webhook_type?: string;
+      vendor_data?: string | null;
+      extracted_name?: string | null;
+    };
+
+    const signature = req.header("x-signature-simple");
+    const timestamp = req.header("x-timestamp");
+    const secret = process.env.DIDIT_WEBHOOK_SECRET;
+
+    const sessionId = body.session_id ?? null;
+    const status = body.status ?? null;
+    const webhookType = body.webhook_type ?? null;
+
+    const isValid = verifyDiditSimpleSignature({
+      signature,
+      timestamp,
+      sessionId,
+      status,
+      webhookType,
+      secret,
+    });
+
+    if (!isValid) {
+      return res.status(401).json({
+        error: "Invalid Didit webhook signature",
+      });
+    }
+
+    if (!sessionId || !status) {
+      return res.status(400).json({
+        error: "Missing session_id or status in webhook payload",
+      });
+    }
+
+    // Lookup session by Didit session ID
+    const kycSession = await prisma.kycSession.findUnique({
+      where: { diditSessionId: sessionId },
+    });
+
+    // If session not found, return 200 to avoid endless retries, but log it
+    if (!kycSession) {
+      console.warn(
+        `Received Didit webhook for unknown session_id=${sessionId}, status=${status}`
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // Idempotency: if not in CREATED state, do nothing
+    if (kycSession.status !== "CREATED") {
+      return res.status(200).json({ ok: true });
+    }
+
+    const normalizedStatus = status.toLowerCase();
+
+    // If failed, mark session as FAILED
+    if (normalizedStatus === "failed") {
+      await prisma.kycSession.update({
+        where: { id: kycSession.id },
+        data: { status: "FAILED" },
+      });
+      return res.status(200).json({ ok: true });
+    }
+
+    // Treat "verified" (or Didit "approved") as success
+    const isVerified =
+      normalizedStatus === "verified" || normalizedStatus === "approved";
+
+    if (!isVerified) {
+      console.warn(
+        `Unhandled Didit status "${status}" for session_id=${sessionId}, leaving as CREATED`
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // Extract name from Didit webhook structure
+    // The name is nested in decision.id_verifications[0]
+    const decision = (body as any).decision;
+    let extractedName = "";
+
+    if (
+      decision?.id_verifications &&
+      Array.isArray(decision.id_verifications) &&
+      decision.id_verifications.length > 0
+    ) {
+      const idVerification = decision.id_verifications[0];
+
+      // Prefer full_name if available, otherwise construct from first_name + last_name
+      if (
+        idVerification.full_name &&
+        typeof idVerification.full_name === "string"
+      ) {
+        extractedName = idVerification.full_name.trim();
+      } else if (idVerification.first_name || idVerification.last_name) {
+        const firstName = (idVerification.first_name || "").trim();
+        const lastName = (idVerification.last_name || "").trim();
+        extractedName = `${firstName} ${lastName}`.trim();
+      }
+    }
+
+    // Basic name validation (length/chars). We keep this minimal for now.
+    if (!extractedName || extractedName.length > 128) {
+      await prisma.kycSession.update({
+        where: { id: kycSession.id },
+        data: { status: "FAILED" },
+      });
+      console.warn(
+        `Invalid or missing extracted_name for session_id=${sessionId}, marking as FAILED. Name: "${extractedName}"`
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    // TODO: Check on-chain name uniqueness via IdentityRegistry
+    // TODO: If taken, set status=FAILED and return 200
+    // TODO: Otherwise, write name on-chain and set status=VERIFIED
+    //
+    // For now, we optimistically mark it as VERIFIED and rely on a
+    // future integration with the Zama IdentityRegistry.
+
+    await prisma.kycSession.update({
+      where: { id: kycSession.id },
+      data: { status: "VERIFIED" },
+    });
+
+    console.log(
+      `Didit webhook processed for session_id=${sessionId}, status=${status}, extracted_name="${extractedName}"`
+    );
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("Error handling Didit webhook:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 });
 

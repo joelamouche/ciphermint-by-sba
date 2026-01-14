@@ -112,6 +112,88 @@ npm run build
 npm start
 ```
 
+## Exposing Webhooks to Didit (ngrok)
+
+To test the Didit webhook (`POST /api/kyc/webhook`) from your local machine, you can expose your local server using **ngrok**.
+
+### 1. Install or Update ngrok
+
+**macOS (Homebrew):**
+```bash
+brew install ngrok/ngrok/ngrok
+# Or if already installed, update it:
+brew upgrade ngrok/ngrok/ngrok
+```
+
+**Other platforms:**
+- Download from [ngrok.com/download](https://ngrok.com/download)
+- Or update existing installation: `ngrok update`
+
+**Check your version:**
+```bash
+ngrok version
+```
+
+If you get an error about your version being too old (minimum 3.19.0), update ngrok:
+```bash
+# macOS with Homebrew:
+brew upgrade ngrok/ngrok/ngrok
+
+# Or download latest from:
+# https://ngrok.com/download
+```
+
+Then authenticate ngrok (only once, using the token from your ngrok account):
+```bash
+ngrok config add-authtoken YOUR_NGROK_AUTHTOKEN
+```
+
+### 2. Start your local backend
+
+From the `backend` directory:
+```bash
+npm run dev
+```
+
+Your API should be running on `http://localhost:3000`.
+
+### 3. Start an ngrok tunnel
+
+In a separate terminal:
+```bash
+ngrok http 3000
+```
+
+ngrok will print a public HTTPS URL, for example:
+```text
+https://random-subdomain.ngrok.io
+```
+
+### 4. Configure Didit callback + webhook URL
+
+Use the ngrok URL in both:
+
+- `.env` (DIDIT callback):
+  ```env
+  DIDIT_CALLBACK_URL="https://random-subdomain.ngrok.io/api/kyc/webhook"
+  ```
+
+- Didit Console:
+  - Set the webhook URL to  
+    `https://random-subdomain.ngrok.io/api/kyc/webhook`
+
+Make sure you also set the Didit webhook secret in `.env`:
+```env
+DIDIT_WEBHOOK_SECRET="your-didit-webhook-secret-here"
+```
+
+Restart the backend after changing `.env`:
+```bash
+npm run dev
+```
+
+Now when Didit sends webhook events, they will be forwarded via ngrok to your local `/api/kyc/webhook` endpoint.
+
 ## API Endpoints
 
 ### Get SIWE Nonce
