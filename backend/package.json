@@ -19,7 +19,9 @@
     "@prisma/client": "^5.19.1",
     "express": "^4.21.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "siwe": "^2.1.4",
+    "ethers": "^6.13.2"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

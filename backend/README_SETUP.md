@@ -132,6 +132,82 @@ Response:
 }
 ```
 
+### Create KYC Session (manual curl)
+```
+POST /api/kyc/session
+```
+
+**Prerequisites:**
+- You have already requested a nonce via `GET /api/auth/nonce?walletAddress=0x...`
+- The frontend (or you) have built a valid SIWE message using that nonce and signed it
+- Environment variables for Didit are set (or you are fine with mock Didit sessions):
+  ```env
+  DIDIT_API_KEY=your_didit_api_key          # optional for now; if missing, mock session is used
+  DIDIT_WORKFLOW_ID=your_didit_workflow_id  # optional for now; if missing, mock session is used
+  DIDIT_CALLBACK_URL=https://your-backend.com/api/kyc/webhook  # optional
+  ```
+
+**Example request (replace placeholders with real SIWE values):**
+```bash
+curl -X POST "http://localhost:3000/api/kyc/session" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletAddress": "0x0BAd9DaD98143b2E946e8A40E4f27537be2f55E2",
+    "siweMessage": "YOUR_SIWE_MESSAGE_STRING",
+    "siweSignature": "0xYOUR_SIWE_SIGNATURE",
+    "encryptionKey": "YOUR_ZAMA_FHE_PUBLIC_KEY"
+  }'
+```
+
+**Successful response:**
+```json
+{
+  "sessionUrl": "https://verification.didit.me/session/abcd1234"
+}
+```
+
+### Create KYC Session (helper script)
+
+For local testing without writing your own SIWE signing logic, you can use the helper script in `backend/scripts/test-kyc-session.sh`.
+
+#### 1. Make the script executable
+
+From the `backend` directory:
+```bash
+chmod +x scripts/test-kyc-session.sh
+```
+
+#### 2. Set required environment variables
+
+At minimum you need a test wallet address and private key:
+```bash
+export PUBLIC_ADDRESS=0xYourTestAddressHere
+export PRIVATE_KEY=0xYourPrivateKeyHere
+```
+
+Optional overrides (these defaults are usually fine for local dev):
+```bash
+export API_URL=http://localhost:3000             # default
+export ENCRYPTION_KEY=TEST_ENCRYPTION_KEY        # default
+export SIWE_DOMAIN=localhost:3000                # default
+export SIWE_URI=http://localhost:3000            # default
+export CHAIN_ID=1                                # default
+```
+
+#### 3. Run the script
+
+From the `backend` directory:
+```bash
+./scripts/test-kyc-session.sh
+```
+
+What the script does:
+- Fetches a nonce from `GET /api/auth/nonce?walletAddress=...`
+- Builds a proper SIWE message using `siwe` + `ethers`
+- Signs it with your `PRIVATE_KEY`
+- Calls `POST /api/kyc/session` with `walletAddress`, `siweMessage`, `siweSignature`, and `encryptionKey`
+- Prints the HTTP status and JSON response (including `sessionUrl` if successful)
+
 ### Health Check
 ```
 GET /health

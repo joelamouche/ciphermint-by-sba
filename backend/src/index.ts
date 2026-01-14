@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { nonceRouter } from "./routes/nonce";
+import { kycRouter } from "./routes/kyc";
 
 dotenv.config();
 
@@ -14,6 +15,7 @@ app.use(express.json());
 
 // Routes
 app.use("/api/auth", nonceRouter);
+app.use("/api/kyc", kycRouter);
 
 // Health check
 app.get("/health", (req: Request, res: Response) => {
