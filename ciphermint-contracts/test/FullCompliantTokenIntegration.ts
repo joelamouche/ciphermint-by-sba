@@ -218,6 +218,7 @@ describe("Full Integration Flow", function () {
     // Note: euint64 max is ~18.4 quintillion. Using smaller values for tests.
     const MINT_AMOUNT = 1000000000n; // 1 billion (fits easily in uint64)
     const TRANSFER_AMOUNT = 100000000n; // 100 million
+    const CLAIM_AMOUNT = 100n;
     const UINT64_MAX = (1n << 64n) - 1n;
 
     it("should mint tokens to Alice", async function () {
@@ -227,6 +228,62 @@ describe("Full Integration Flow", function () {
       const decryptedBalance = await fhevm.userDecryptEuint(FhevmType.euint64, balance, tokenAddress, signers.alice);
 
       expect(decryptedBalance).to.equal(MINT_AMOUNT);
+    });
+
+    it("should allow compliant user to claim tokens once", async function () {
+      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedBefore = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceBefore,
+        tokenAddress,
+        signers.alice,
+      );
+
+      await token.connect(signers.alice).claimTokens();
+
+      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedAfter = await fhevm.userDecryptEuint(FhevmType.euint64, balanceAfter, tokenAddress, signers.alice);
+
+      expect(decryptedAfter).to.equal(decryptedBefore + CLAIM_AMOUNT);
+
+      const claimedStatus = await token.connect(signers.alice).hasClaimedMint(signers.alice.address);
+      const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.alice);
+      expect(hasClaimed).to.be.true;
+    });
+
+    it("should not mint on second claim", async function () {
+      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedBefore = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceBefore,
+        tokenAddress,
+        signers.alice,
+      );
+
+      await token.connect(signers.alice).claimTokens();
+
+      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedAfter = await fhevm.userDecryptEuint(FhevmType.euint64, balanceAfter, tokenAddress, signers.alice);
+
+      expect(decryptedAfter).to.equal(decryptedBefore);
+    });
+
+    it("should not mint for non-compliant user", async function () {
+      await token.connect(signers.charlie).claimTokens();
+
+      const balanceAfter = await token.connect(signers.charlie).balanceOf(signers.charlie.address);
+      const decryptedAfter = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceAfter,
+        tokenAddress,
+        signers.charlie,
+      );
+
+      expect(decryptedAfter).to.equal(0n);
+
+      const claimedStatus = await token.connect(signers.charlie).hasClaimedMint(signers.charlie.address);
+      const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.charlie);
+      expect(hasClaimed).to.be.false;
     });
 
     it("should reject mint amounts above uint64 max", async function () {
@@ -264,7 +321,7 @@ describe("Full Integration Flow", function () {
         signers.alice,
       );
 
-      expect(decryptedAliceBalance).to.equal(MINT_AMOUNT - TRANSFER_AMOUNT);
+      expect(decryptedAliceBalance).to.equal(MINT_AMOUNT + CLAIM_AMOUNT - TRANSFER_AMOUNT);
     });
 
     it("should reject transfer with unauthorized ciphertext handle", async function () {

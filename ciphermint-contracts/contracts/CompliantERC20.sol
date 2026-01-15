@@ -45,6 +45,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
 
     /// @notice Total supply (public for transparency)
     uint256 public totalSupply;
+    /// @notice Claimable mint amount (plaintext units)
+    uint64 public constant CLAIM_AMOUNT = 100;
 
     // ============ Token State ============
 
@@ -53,6 +55,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
 
     /// @notice Encrypted allowances
     mapping(address owner => mapping(address spender => euint64 allowance)) private allowances;
+    /// @notice Encrypted one-time mint claim status
+    mapping(address account => ebool claimedMint) private claimedMints;
 
     // ============ Compliance State ============
 
@@ -183,6 +187,36 @@ contract CompliantERC20 is ZamaEthereumConfig {
         emit Mint(to, amount);
     }
 
+    /**
+     * @notice Claim 100 tokens once if compliant
+     * @dev Compliance is evaluated via encrypted checks; failure mints 0.
+     * @return success Always true
+     */
+    function claimTokens() external returns (bool success) {
+        if (address(complianceChecker) == address(0)) revert ComplianceCheckerNotSet();
+
+        ebool isCompliant = complianceChecker.checkCompliance(msg.sender);
+        ebool alreadyClaimed = claimedMints[msg.sender];
+        if (!FHE.isInitialized(alreadyClaimed)) {
+            alreadyClaimed = FHE.asEbool(false);
+        }
+
+        ebool canClaim = FHE.and(isCompliant, FHE.not(alreadyClaimed));
+        euint64 mintAmount = FHE.select(canClaim, FHE.asEuint64(CLAIM_AMOUNT), FHE.asEuint64(0));
+
+        euint64 newBalance = FHE.add(balances[msg.sender], mintAmount);
+        balances[msg.sender] = newBalance;
+        FHE.allowThis(newBalance);
+        FHE.allow(newBalance, msg.sender);
+
+        ebool newClaimed = FHE.or(alreadyClaimed, canClaim);
+        claimedMints[msg.sender] = newClaimed;
+        FHE.allowThis(newClaimed);
+        FHE.allow(newClaimed, msg.sender);
+
+        return true;
+    }
+
     // ============ Token Functions ============
 
     /**
@@ -302,6 +336,15 @@ contract CompliantERC20 is ZamaEthereumConfig {
      */
     function decimals() external pure returns (uint8) {
         return DECIMALS;
+    }
+
+    /**
+     * @notice Get encrypted claim status for an account
+     * @param account Address to query
+     * @return Encrypted boolean indicating whether the account has claimed
+     */
+    function hasClaimedMint(address account) external view returns (ebool) {
+        return claimedMints[account];
     }
 
     // ============ Internal Functions ============
