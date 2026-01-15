@@ -59,6 +59,12 @@ For FHEVM development details, see:
    npx hardhat verify --network sepolia <CONTRACT_ADDRESS>
    ```
 
+### Sepolia Deployments
+
+- `IdentityRegistry`: `0x776CAFDe491cD1F5f23278B479F49DbE81c9631D`
+- `ComplianceRules`: `0xbB596231fBe70dC6e5e373Cea835a274A08E582E`
+- `CompliantERC20`: `0xfc03BA47BC75039eD7e94Bc6a383f69CfA8A472F`
+
 6. **Test on Sepolia Testnet**
 
    ```bash
