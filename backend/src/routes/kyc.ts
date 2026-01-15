@@ -2,6 +2,12 @@ import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { verifySiwe } from "../lib/siwe";
 import { createDiditSession, verifyDiditSimpleSignature } from "../lib/didit";
+import {
+  attestIdentity,
+  hashName,
+  isNameTaken,
+  initializeZamaSDK,
+} from "../lib/zama";
 
 const router = Router();
 
@@ -225,20 +231,94 @@ router.post("/webhook", async (req: Request, res: Response) => {
       return res.status(200).json({ ok: true });
     }
 
-    // TODO: Check on-chain name uniqueness via IdentityRegistry
-    // TODO: If taken, set status=FAILED and return 200
-    // TODO: Otherwise, write name on-chain and set status=VERIFIED
-    //
-    // For now, we optimistically mark it as VERIFIED and rely on a
-    // future integration with the Zama IdentityRegistry.
+    // Extract date of birth from Didit webhook
+    let birthYear: number | null = null;
+    if (decision?.id_verifications?.[0]?.date_of_birth) {
+      const dobString = decision.id_verifications[0].date_of_birth;
+      // Parse date string (format: "YYYY-MM-DD" or similar)
+      const dobDate = new Date(dobString);
+      if (!isNaN(dobDate.getTime())) {
+        birthYear = dobDate.getFullYear();
+      }
+    }
 
+    if (!birthYear) {
+      console.warn(
+        `Missing or invalid date_of_birth for session_id=${sessionId}, marking as FAILED`
+      );
+      await prisma.kycSession.update({
+        where: { id: kycSession.id },
+        data: { status: "FAILED" },
+      });
+      return res.status(200).json({ ok: true });
+    }
+
+    //TODO: Implement this
+    // Check name uniqueness on-chain (optional - contract will also check)
+    // const nameHash = hashName(extractedName);
+    const contractAddress = process.env.ZAMA_IDENTITY_REGISTRY_ADDRESS;
+    // if (contractAddress) {
+    //   const nameTaken = await isNameTaken(contractAddress, nameHash);
+    //   if (nameTaken) {
+    //     console.warn(
+    //       `Name "${extractedName}" already taken for session_id=${sessionId}, marking as FAILED`
+    //     );
+    //     await prisma.kycSession.update({
+    //       where: { id: kycSession.id },
+    //       data: { status: "FAILED" },
+    //     });
+    //     return res.status(200).json({ ok: true });
+    //   }
+    // }
+
+    // Write identity to Zama IdentityRegistry on-chain
+    if (contractAddress) {
+      // Initialize Zama SDK if needed (idempotent)
+      try {
+        await initializeZamaSDK();
+      } catch (error) {
+        console.error("Failed to initialize Zama SDK:", error);
+        await prisma.kycSession.update({
+          where: { id: kycSession.id },
+          data: { status: "FAILED" },
+        });
+        return res.status(200).json({ ok: true });
+      }
+
+      const attestResult = await attestIdentity({
+        userAddress: kycSession.walletAddress,
+        birthYear,
+        fullName: extractedName,
+      });
+
+      if (!attestResult.success) {
+        console.error(
+          `Failed to attest identity for session_id=${sessionId}: ${attestResult.error}`
+        );
+        await prisma.kycSession.update({
+          where: { id: kycSession.id },
+          data: { status: "FAILED" },
+        });
+        return res.status(200).json({ ok: true });
+      }
+
+      console.log(
+        `Identity attested on-chain for session_id=${sessionId}, tx=${attestResult.transactionHash}`
+      );
+    } else {
+      console.warn(
+        "ZAMA_IDENTITY_REGISTRY_ADDRESS not configured, skipping on-chain attestation"
+      );
+    }
+
+    // Mark session as VERIFIED
     await prisma.kycSession.update({
       where: { id: kycSession.id },
       data: { status: "VERIFIED" },
     });
 
     console.log(
-      `Didit webhook processed for session_id=${sessionId}, status=${status}, extracted_name="${extractedName}"`
+      `Didit webhook processed for session_id=${sessionId}, status=${status}, extracted_name="${extractedName}", birth_year=${birthYear}`
     );
 
     return res.status(200).json({ ok: true });

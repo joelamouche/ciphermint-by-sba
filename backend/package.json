@@ -10,13 +10,17 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "prisma:format": "prisma format"
+    "prisma:format": "prisma format",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "INTEGRATION_TESTS_ENABLED=true vitest run --config=vitest.integration.config.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^5.19.1",
+    "@zama-fhe/relayer-sdk": "^0.3.0-8",
     "express": "^4.21.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -29,6 +33,7 @@
     "@types/node": "^22.7.5",
     "prisma": "^5.19.1",
     "tsx": "^4.19.1",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.0"
   }
 }
