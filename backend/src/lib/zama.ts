@@ -115,7 +115,7 @@ export function calculateBirthYearOffset(birthYear: number): number {
   return birthYear - 1900;
 }
 
-//TODO: Implement this
+//TODO: Implement this => but this would mean exposing nameHashToAddress so not ideal for now
 /**
  * Check if a name is already taken in the IdentityRegistry
  * @param contractAddress IdentityRegistry contract address

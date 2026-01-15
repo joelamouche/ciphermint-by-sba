@@ -253,7 +253,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
       return res.status(200).json({ ok: true });
     }
 
-    //TODO: Implement this
+    //TODO: Implement this => but this would mean exposing nameHashToAddress so not ideal for now
     // Check name uniqueness on-chain (optional - contract will also check)
     // const nameHash = hashName(extractedName);
     const contractAddress = process.env.ZAMA_IDENTITY_REGISTRY_ADDRESS;
