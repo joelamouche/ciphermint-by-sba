@@ -5,6 +5,7 @@ import {
   useChainId,
   useReadContract,
   useSignMessage,
+  useSignTypedData,
   useWriteContract,
 } from "wagmi";
 import { SiweMessage } from "siwe";
@@ -16,7 +17,7 @@ import {
 } from "./config";
 import { identityRegistryAbi } from "./abis/identityRegistry";
 import { compliantErc20Abi } from "./abis/compliantErc20";
-import { decryptEbool, encryptUint64, getFhevmPublicKey } from "./lib/fhevm";
+import { encryptUint64, userDecryptEbool } from "./lib/fhevm";
 import "./App.css";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -30,12 +31,14 @@ export default function App() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const { signMessageAsync } = useSignMessage();
+  const { signTypedDataAsync } = useSignTypedData();
   const { writeContractAsync } = useWriteContract();
 
   const [sessionUrl, setSessionUrl] = useState<string | null>(null);
   const [kycStatus, setKycStatus] = useState<Status>("idle");
   const [claimStatus, setClaimStatus] = useState<Status>("idle");
   const [transferStatus, setTransferStatus] = useState<Status>("idle");
+  const [mintStatus, setMintStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<boolean | null>(null);
   const [transferTo, setTransferTo] = useState("");
@@ -55,7 +58,7 @@ export default function App() {
     },
   });
 
-  const { data: claimedEncrypted } = useReadContract({
+  const { data: claimedEncrypted, refetch: refetchClaimed } = useReadContract({
     address: COMPLIANT_ERC20_ADDRESS,
     abi: compliantErc20Abi,
     functionName: "hasClaimedMint",
@@ -66,27 +69,12 @@ export default function App() {
   });
 
   useEffect(() => {
-    let mounted = true;
-    async function runDecrypt() {
-      if (!claimedEncrypted) {
-        if (mounted) {
-          setClaimed(null);
-        }
-        return;
-      }
-      const decrypted = await decryptEbool(claimedEncrypted);
-      if (mounted) {
-        setClaimed(decrypted);
-      }
-    }
-    runDecrypt();
-    return () => {
-      mounted = false;
-    };
-  }, [claimedEncrypted]);
+    setClaimed(null);
+    setMintStatus("idle");
+  }, [address, COMPLIANT_ERC20_ADDRESS]);
 
   const canClaim = useMemo(() => {
-    return Boolean(isAttested) && claimed === false;
+    return Boolean(isAttested) && claimed !== true;
   }, [isAttested, claimed]);
 
   async function handleStartKyc() {
@@ -118,8 +106,7 @@ export default function App() {
       });
       const messageToSign = siweMessage.prepareMessage();
       const signature = await signMessageAsync({ message: messageToSign });
-
-      const encryptionKey = await getFhevmPublicKey();
+      console.log("messageToSign", messageToSign);
       const sessionRes = await fetch(`${API_BASE_URL}/api/kyc/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -127,7 +114,6 @@ export default function App() {
           walletAddress: address,
           siweMessage: messageToSign,
           siweSignature: signature,
-          encryptionKey: encryptionKey ?? "",
         }),
       });
       if (!sessionRes.ok) {
@@ -207,6 +193,31 @@ export default function App() {
     await refetchAttested();
   }
 
+  async function handleRefreshMint() {
+    if (!address || !COMPLIANT_ERC20_ADDRESS) {
+      setError("Connect your wallet and configure CompliantERC20 address.");
+      return;
+    }
+    setError(null);
+    setMintStatus("loading");
+    try {
+      const { data } = await refetchClaimed();
+      console.log("refetchClaimed data", data);
+      const decrypted = await userDecryptEbool({
+        encryptedValue: data ?? null,
+        contractAddress: COMPLIANT_ERC20_ADDRESS,
+        userAddress: address,
+        signTypedDataAsync,
+      });
+      console.log("decrypted", decrypted);
+      setClaimed(decrypted);
+      setMintStatus("success");
+    } catch (err) {
+      setMintStatus("error");
+      setError(err instanceof Error ? err.message : "Mint refresh failed.");
+    }
+  }
+
   async function handleCopyAddress() {
     if (!address) return;
     try {
@@ -266,9 +277,20 @@ export default function App() {
             </strong>
           </div>
         </div>
-        <button type="button" onClick={handleRefreshIdentity}>
-          Refresh identity
-        </button>
+        <div className="status-actions">
+          <button type="button" onClick={handleRefreshIdentity}>
+            Refresh identity
+          </button>
+          <button
+            type="button"
+            onClick={handleRefreshMint}
+            disabled={mintStatus === "loading"}
+          >
+            {mintStatus === "loading"
+              ? "Refreshing..."
+              : "Refresh mint claimed"}
+          </button>
+        </div>
       </section>
 
       <section className="card">
@@ -277,19 +299,20 @@ export default function App() {
           If you are not attested yet, start the Didit flow in another tab. Once
           completed, the backend will write your identity on-chain.
         </p>
-        <button
-          type="button"
-          onClick={handleStartKyc}
-          disabled={!isConnected || kycStatus === "loading"}
-        >
-          {kycStatus === "loading" ? "Creating session..." : "Start KYC"}
-        </button>
-        {sessionUrl && (
+        {sessionUrl ? (
           <p className="link">
             <a href={sessionUrl} target="_blank" rel="noreferrer">
               Open Didit verification
             </a>
           </p>
+        ) : (
+          <button
+            type="button"
+            onClick={handleStartKyc}
+            disabled={!isConnected || kycStatus === "loading"}
+          >
+            {kycStatus === "loading" ? "Creating session..." : "Start KYC"}
+          </button>
         )}
       </section>
 
@@ -304,7 +327,8 @@ export default function App() {
         </button>
         {!canClaim && (
           <p className="muted">
-            You must be attested and not have claimed before.
+            You must be attested to claim. If claim status is unknown, claiming
+            will safely mint 0 when already claimed.
           </p>
         )}
       </section>

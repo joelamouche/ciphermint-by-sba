@@ -2,12 +2,7 @@ import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { verifySiwe } from "../lib/siwe";
 import { createDiditSession, verifyDiditSimpleSignature } from "../lib/didit";
-import {
-  attestIdentity,
-  hashName,
-  isNameTaken,
-  initializeZamaSDK,
-} from "../lib/zama";
+import { attestIdentity, initializeZamaSDK } from "../lib/zama";
 
 const router = Router();
 
@@ -27,14 +22,13 @@ function sanitizeString(str: string): string {
  */
 router.post("/session", async (req: Request, res: Response) => {
   try {
-    const { walletAddress, siweMessage, siweSignature, encryptionKey } =
-      req.body;
+    const { walletAddress, siweMessage, siweSignature } = req.body;
 
     // Validate required fields
-    if (!walletAddress || !siweMessage || !siweSignature || !encryptionKey) {
+    if (!walletAddress || !siweMessage || !siweSignature) {
       return res.status(400).json({
         error:
-          "Missing required fields: walletAddress, siweMessage, siweSignature, encryptionKey",
+          "Missing required fields: walletAddress, siweMessage, siweSignature",
       });
     }
 
@@ -50,7 +44,6 @@ router.post("/session", async (req: Request, res: Response) => {
     // the SIWE parser expects the exact EIP-4361 formatted string.
     const sanitizedMessage = String(siweMessage);
     const sanitizedSignature = sanitizeString(siweSignature);
-    const sanitizedEncryptionKey = sanitizeString(encryptionKey);
 
     // Verify SIWE signature
     const verification = await verifySiwe(
@@ -71,7 +64,6 @@ router.post("/session", async (req: Request, res: Response) => {
     try {
       diditSession = await createDiditSession({
         walletAddress: walletAddress.toLowerCase(),
-        encryptionKey: sanitizedEncryptionKey,
       });
     } catch (error) {
       console.error("Error creating Didit session:", error);

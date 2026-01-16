@@ -13,11 +13,6 @@ import crypto from "crypto";
 
 interface CreateDiditSessionRequest {
   walletAddress: string;
-  /**
-   * Optional encryption key we might want to pass later via vendor_data
-   * or a custom field in the workflow.
-   */
-  encryptionKey?: string;
 }
 
 export interface CreateDiditSessionResponse {

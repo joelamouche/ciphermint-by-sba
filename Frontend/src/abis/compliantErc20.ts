@@ -11,7 +11,7 @@ export const compliantErc20Abi = [
     name: "hasClaimedMint",
     stateMutability: "view",
     inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
+    outputs: [{ name: "", type: "bytes32" }],
   },
   {
     type: "function",

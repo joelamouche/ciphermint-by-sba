@@ -141,8 +141,7 @@ POST /api/kyc/session
 {
   "walletAddress": "string",
   "siweMessage": "string",
-  "siweSignature": "string",
-  "encryptionKey": "string" 
+  "siweSignature": "string"
 }
 ```
 
