@@ -21,6 +21,11 @@ import "./App.css";
 
 type Status = "idle" | "loading" | "success" | "error";
 
+function formatAddress(value?: string) {
+  if (!value) return "Disconnected";
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
 export default function App() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -35,6 +40,7 @@ export default function App() {
   const [claimed, setClaimed] = useState<boolean | null>(null);
   const [transferTo, setTransferTo] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const identityReady = Boolean(IDENTITY_REGISTRY_ADDRESS);
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
@@ -201,6 +207,17 @@ export default function App() {
     await refetchAttested();
   }
 
+  async function handleCopyAddress() {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      setError("Failed to copy address.");
+    }
+  }
+
   return (
     <div className="app">
       <header>
@@ -219,7 +236,20 @@ export default function App() {
         <div className="status-grid">
           <div>
             <span>Wallet</span>
-            <strong>{isConnected ? address : "Disconnected"}</strong>
+            <div className="address-row">
+              <strong>
+                {formatAddress(isConnected ? address : undefined)}
+              </strong>
+              {isConnected && (
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={handleCopyAddress}
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              )}
+            </div>
           </div>
           <div>
             <span>Identity</span>

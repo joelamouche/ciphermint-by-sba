@@ -46,6 +46,22 @@ h2 {
   margin-top: 4px;
 }
 
+.address-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button.ghost {
+  background: transparent;
+  border: 1px solid #2e2e44;
+  color: #c7c7d1;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
 button {
   background: #5b5bff;
   color: white;
