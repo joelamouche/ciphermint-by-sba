@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/config.ts","./src/main.tsx","./src/vite-env.d.ts","./src/abis/complianterc20.ts","./src/abis/identityregistry.ts","./src/lib/fhevm.ts"],"version":"5.9.3"}

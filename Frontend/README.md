@@ -30,13 +30,11 @@ This follows the root README section "Identity & Mint Logic — Phase 1".
 
 1. Wallet login
    - Connect wallet.
-   - Call IdentityRegistry to check:
-     - `isAttested` for the wallet address.
-     - `hasClaimedMint` (or equivalent flag).
+   - Call IdentityRegistry for `isAttested` and CompliantERC20 for `hasClaimedMint`.
 
 2. Name exists
-   - If `hasName` and not claimed: show "Claim 100 tokens".
-   - If `hasName` and claimed: show "Already claimed".
+   - If `isAttested` and not claimed: show "Claim 100 tokens".
+   - If `isAttested` and claimed: show "Already claimed".
 
 3. No associated name
    - Display Didit KYC link; user completes flow in another tab.
@@ -52,8 +50,8 @@ This follows the root README section "Identity & Mint Logic — Phase 1".
    - Contract validates compliance via IdentityRegistry.
 
 6. Transfers
-   - Transfer only to verified addresses.
-   - Show "Recipient not verified" on failure.
+   - Transfers only succeed when the recipient is verified.
+   - Failures are silent due to the confidential flow.
 
 ## Backend Integration (Expected)
 
@@ -67,7 +65,7 @@ See `backend/README.md` for API endpoints and SIWE flow details.
 - CompliantERC20
   - `claimTokens()`
   - `hasClaimedMint(address)`
-  - `transfer(address,uint256)`
+  - `transfer(address, externalEuint64, bytes)` (encrypted amount + proof)
 
 Use the generated contract types from `ciphermint-contracts/types`.
 
@@ -88,7 +86,7 @@ Use the generated contract types from `ciphermint-contracts/types`.
 
 - Keep `address`, `identityStatus`, and `mintStatus` in global state.
 - Cache contract reads with React Query or wagmi hooks.
-- Poll `kyc/status` while KYC is pending.
+- Poll `isAttested` on-chain while KYC is pending.
 
 ## Error States
 
