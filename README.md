@@ -42,6 +42,41 @@ Zama FHEVM (Sepolia)
 
 ---
 
+## Local Development (Docker)
+
+This repo includes a dev-only Docker Compose setup for PostgreSQL, backend, and frontend.
+
+### Prerequisites
+
+- Docker Desktop
+- `make` (or run the `docker compose` commands directly)
+
+### Setup
+
+1. Create the backend env file:
+   - Copy `backend/env.template` to `backend/.env`
+   - Fill in Didit and Zama variables as needed
+2. Optional frontend env:
+   - `VITE_API_BASE_URL` is set in `docker-compose.dev.yml` to `http://localhost:3000`
+   - If you need other `VITE_` values, create `Frontend/.env` and add them there
+
+### Commands
+
+```
+make dev
+```
+
+Other useful commands:
+
+```
+make db
+make logs
+make stop
+make clean
+```
+
+---
+
 ## Identity & Mint Logic — Phase 1
 
 1. **Wallet login**
