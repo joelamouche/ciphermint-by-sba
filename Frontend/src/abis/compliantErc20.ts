@@ -8,6 +8,13 @@ export const compliantErc20Abi = [
   },
   {
     type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "bytes32" }],
+  },
+  {
+    type: "function",
     name: "hasClaimedMint",
     stateMutability: "view",
     inputs: [{ name: "account", type: "address" }],

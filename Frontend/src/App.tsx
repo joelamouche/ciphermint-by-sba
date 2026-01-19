@@ -17,7 +17,11 @@ import {
 } from "./config";
 import { identityRegistryAbi } from "./abis/identityRegistry";
 import { compliantErc20Abi } from "./abis/compliantErc20";
-import { encryptUint64, userDecryptEbool } from "./lib/fhevm";
+import {
+  encryptUint64,
+  userDecryptEbool,
+  userDecryptEuint64,
+} from "./lib/fhevm";
 import "./App.css";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -39,8 +43,10 @@ export default function App() {
   const [claimStatus, setClaimStatus] = useState<Status>("idle");
   const [transferStatus, setTransferStatus] = useState<Status>("idle");
   const [mintStatus, setMintStatus] = useState<Status>("idle");
+  const [balanceStatus, setBalanceStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<boolean | null>(null);
+  const [balance, setBalance] = useState<bigint | null>(null);
   const [transferTo, setTransferTo] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [copied, setCopied] = useState(false);
@@ -68,9 +74,21 @@ export default function App() {
     },
   });
 
+  const { data: balanceEncrypted, refetch: refetchBalance } = useReadContract({
+    address: COMPLIANT_ERC20_ADDRESS,
+    abi: compliantErc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: Boolean(address && tokenReady),
+    },
+  });
+
   useEffect(() => {
     setClaimed(null);
     setMintStatus("idle");
+    setBalance(null);
+    setBalanceStatus("idle");
   }, [address, COMPLIANT_ERC20_ADDRESS]);
 
   const canClaim = useMemo(() => {
@@ -106,7 +124,6 @@ export default function App() {
       });
       const messageToSign = siweMessage.prepareMessage();
       const signature = await signMessageAsync({ message: messageToSign });
-      console.log("messageToSign", messageToSign);
       const sessionRes = await fetch(`${API_BASE_URL}/api/kyc/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -218,6 +235,29 @@ export default function App() {
     }
   }
 
+  async function handleRefreshBalance() {
+    if (!address || !COMPLIANT_ERC20_ADDRESS) {
+      setError("Connect your wallet and configure CompliantERC20 address.");
+      return;
+    }
+    setError(null);
+    setBalanceStatus("loading");
+    try {
+      const { data } = await refetchBalance();
+      const decrypted = await userDecryptEuint64({
+        encryptedValue: data ?? null,
+        contractAddress: COMPLIANT_ERC20_ADDRESS,
+        userAddress: address,
+        signTypedDataAsync,
+      });
+      setBalance(decrypted);
+      setBalanceStatus("success");
+    } catch (err) {
+      setBalanceStatus("error");
+      setError(err instanceof Error ? err.message : "Balance refresh failed.");
+    }
+  }
+
   async function handleCopyAddress() {
     if (!address) return;
     try {
@@ -288,9 +328,37 @@ export default function App() {
           >
             {mintStatus === "loading"
               ? "Refreshing..."
+              : claimed === null
+              ? "Decrypt claimed"
               : "Refresh mint claimed"}
           </button>
         </div>
+      </section>
+
+      <section className="card">
+        <h2>Balance</h2>
+        <p className="muted">
+          Decryption requires a signature. Balance is shown in plaintext units.
+        </p>
+        <div className="status-grid">
+          <div>
+            <span>Encrypted balance</span>
+            <strong>
+              {balance === null ? "Encrypted / unknown" : balance.toString()}
+            </strong>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleRefreshBalance}
+          disabled={balanceStatus === "loading"}
+        >
+          {balanceStatus === "loading"
+            ? "Refreshing..."
+            : balance === null
+            ? "Decrypt balance"
+            : "Refresh balance"}
+        </button>
       </section>
 
       <section className="card">

@@ -160,6 +160,76 @@ export async function userDecryptEbool(options: {
   }
 }
 
+export async function userDecryptEuint64(options: {
+  encryptedValue: unknown;
+  contractAddress: string;
+  userAddress: string;
+  signTypedDataAsync: SignTypedDataAsync;
+}): Promise<bigint | null> {
+  const { encryptedValue, contractAddress, userAddress, signTypedDataAsync } =
+    options;
+  const handle = normalizeHandle(encryptedValue);
+  if (!handle) {
+    return null;
+  }
+
+  const instance = await getFhevmInstance();
+  if (
+    typeof instance.generateKeypair !== "function" ||
+    typeof instance.createEIP712 !== "function" ||
+    typeof instance.userDecrypt !== "function"
+  ) {
+    return null;
+  }
+
+  try {
+    const keypair = instance.generateKeypair();
+    const startTimestamp = Math.floor(Date.now() / 1000);
+    const durationDays = 10;
+    const eip712 = instance.createEIP712(
+      keypair.publicKey,
+      [contractAddress],
+      startTimestamp,
+      durationDays
+    );
+    const signature = await signTypedDataAsync({
+      domain: eip712.domain,
+      types: eip712.types,
+      primaryType: "UserDecryptRequestVerification",
+      message: eip712.message,
+    });
+    const signatureHex = signature.replace(/^0x/, "");
+    const result = await instance.userDecrypt(
+      [{ handle, contractAddress }],
+      keypair.privateKey,
+      keypair.publicKey,
+      signatureHex,
+      [contractAddress],
+      userAddress,
+      startTimestamp,
+      durationDays
+    );
+    const decrypted = result?.[handle];
+    if (typeof decrypted === "bigint") {
+      return decrypted;
+    }
+    if (typeof decrypted === "number") {
+      return BigInt(decrypted);
+    }
+    if (typeof decrypted === "string") {
+      try {
+        return BigInt(decrypted);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.warn("Failed to user-decrypt euint64:", error);
+    return null;
+  }
+}
+
 export async function encryptUint64(
   contractAddress: string,
   userAddress: string,
