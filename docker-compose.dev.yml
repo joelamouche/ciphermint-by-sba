@@ -11,9 +11,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   backend:
-    image: node:20-bullseye
+    image: node:22-bullseye
     working_dir: /app
-    command: sh -c "npm install && npx prisma generate && npm run dev"
+    command: sh -c "npm install && npx prisma generate && npx prisma migrate dev --name init && npm run dev"
     environment:
       PORT: 3000
       NODE_ENV: development
@@ -29,7 +29,7 @@ services:
       - postgres
 
   frontend:
-    image: node:20-bullseye
+    image: node:22-bullseye
     working_dir: /app
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
     environment:

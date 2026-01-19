@@ -1,5 +1,5 @@
 .app {
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 32px 24px 64px;
   display: flex;
@@ -7,7 +7,7 @@
   gap: 24px;
 }
 
-header {
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -29,9 +29,90 @@ h2 {
   gap: 12px;
 }
 
-.status-grid {
+.layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.stepper {
+  gap: 16px;
+}
+
+.stepper-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+}
+
+.step.done {
+  opacity: 0.7;
+}
+
+.step.active {
+  border-color: rgba(91, 91, 255, 0.7);
+  background: rgba(91, 91, 255, 0.12);
+}
+
+.step-index {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #1f1f2f;
+  display: grid;
+  place-items: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #c7c7d1;
+}
+
+.step.active .step-index {
+  background: #5b5bff;
+  color: #ffffff;
+}
+
+.step-title {
+  font-weight: 600;
+  display: block;
+}
+
+.step-desc {
+  font-size: 0.85rem;
+  color: #a1a1aa;
+}
+
+.panel {
+  justify-content: center;
+}
+
+.status-grid {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -44,6 +125,25 @@ h2 {
 .status-grid strong {
   display: block;
   margin-top: 4px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-row button {
+  margin-left: auto;
+}
+
+.status-good {
+  color: #a7f3d0;
+}
+
+.status-warn {
+  color: #fef08a;
 }
 
 .address-row {
@@ -66,6 +166,16 @@ button.ghost {
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 0.85rem;
+}
+
+button.ghost:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button.ghost-warn {
+  border-color: rgba(250, 204, 21, 0.6);
+  color: #fde047;
 }
 
 button {
@@ -120,6 +230,24 @@ input {
   border-radius: 12px;
 }
 
-.link a {
-  color: #93c5fd;
+.primary-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #5b5bff;
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    min-height: auto;
+  }
 }

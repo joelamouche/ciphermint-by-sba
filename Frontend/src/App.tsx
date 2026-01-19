@@ -64,7 +64,7 @@ export default function App() {
     },
   });
 
-  const { data: claimedEncrypted, refetch: refetchClaimed } = useReadContract({
+  const { data: _claimedEncrypted, refetch: refetchClaimed } = useReadContract({
     address: COMPLIANT_ERC20_ADDRESS,
     abi: compliantErc20Abi,
     functionName: "hasClaimedMint",
@@ -74,7 +74,7 @@ export default function App() {
     },
   });
 
-  const { data: balanceEncrypted, refetch: refetchBalance } = useReadContract({
+  const { data: _balanceEncrypted, refetch: refetchBalance } = useReadContract({
     address: COMPLIANT_ERC20_ADDRESS,
     abi: compliantErc20Abi,
     functionName: "balanceOf",
@@ -94,6 +94,39 @@ export default function App() {
   const canClaim = useMemo(() => {
     return Boolean(isAttested) && claimed !== true;
   }, [isAttested, claimed]);
+
+  const isMintEncrypted = claimed === null;
+  const isBalanceEncrypted = balance === null;
+
+  const activeStepId = useMemo(() => {
+    if (!isConnected) return "connect";
+    if (!isAttested) return "verify";
+    if (claimed === true) return "transfer";
+    return "claim";
+  }, [isConnected, isAttested, claimed]);
+
+  const steps = [
+    {
+      id: "connect",
+      title: "Connect wallet",
+      description: "Link a wallet to begin.",
+    },
+    {
+      id: "verify",
+      title: "Verify identity",
+      description: "Complete Didit KYC.",
+    },
+    {
+      id: "claim",
+      title: "Claim tokens",
+      description: "Mint once if eligible.",
+    },
+    {
+      id: "transfer",
+      title: "Transfer",
+      description: "Send confidential tokens.",
+    },
+  ] as const;
 
   async function handleStartKyc() {
     if (!address) {
@@ -271,168 +304,230 @@ export default function App() {
 
   return (
     <div className="app">
-      <header>
+      <header className="topbar">
         <h1>CipherMint</h1>
         <ConnectButton />
       </header>
 
-      <section className="card">
-        <h2>Status</h2>
-        {!identityReady && (
-          <p className="warning">Set VITE_IDENTITY_REGISTRY_ADDRESS.</p>
-        )}
-        {!tokenReady && (
-          <p className="warning">Set VITE_COMPLIANT_ERC20_ADDRESS.</p>
-        )}
-        <div className="status-grid">
-          <div>
-            <span>Wallet</span>
-            <div className="address-row">
-              <strong>
-                {formatAddress(isConnected ? address : undefined)}
-              </strong>
-              {isConnected && (
+      <div className="layout">
+        <main className="main">
+          <section className="card stepper">
+            <h2>Progress</h2>
+            <ol className="stepper-list">
+              {steps.map((step, index) => {
+                const activeIndex = steps.findIndex(
+                  (entry) => entry.id === activeStepId
+                );
+                const isActive = step.id === activeStepId;
+                const isDone = index < activeIndex;
+                return (
+                  <li
+                    key={step.id}
+                    className={`step ${isActive ? "active" : ""} ${
+                      isDone ? "done" : ""
+                    }`}
+                  >
+                    <span className="step-index">{index + 1}</span>
+                    <div>
+                      <span className="step-title">{step.title}</span>
+                      <span className="step-desc">{step.description}</span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+
+          <section className="card panel">
+            {activeStepId === "connect" && (
+              <>
+                <h2>Connect your wallet</h2>
+                <p className="muted">
+                  Connect a wallet to begin the verification and mint flow.
+                </p>
+                <ConnectButton />
+              </>
+            )}
+
+            {activeStepId === "verify" && (
+              <>
+                <h2>Verify identity</h2>
+                <p>
+                  Start the Didit flow in another tab. Once completed, the
+                  backend writes your identity on-chain.
+                </p>
+                {sessionUrl ? (
+                  <a
+                    className="primary-link"
+                    href={sessionUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open Didit verification
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleStartKyc}
+                    disabled={!isConnected || kycStatus === "loading"}
+                  >
+                    {kycStatus === "loading"
+                      ? "Creating session..."
+                      : "Start KYC"}
+                  </button>
+                )}
+              </>
+            )}
+
+            {activeStepId === "claim" && (
+              <>
+                <h2>Claim tokens</h2>
+                <p className="muted">
+                  Claiming is available once per identity. If you already
+                  claimed, the contract safely mints 0.
+                </p>
                 <button
                   type="button"
-                  className="ghost"
-                  onClick={handleCopyAddress}
+                  onClick={handleClaim}
+                  disabled={!canClaim || claimStatus === "loading"}
                 >
-                  {copied ? "Copied" : "Copy"}
+                  {claimStatus === "loading"
+                    ? "Claiming..."
+                    : "Claim 100 tokens"}
                 </button>
-              )}
+              </>
+            )}
+
+            {activeStepId === "transfer" && (
+              <>
+                <h2>Transfer</h2>
+                <p className="muted">
+                  Transfers are confidential; failed compliance results in a
+                  silent transfer of 0.
+                </p>
+                <label className="field">
+                  <span>Recipient address</span>
+                  <input
+                    value={transferTo}
+                    onChange={(event) => setTransferTo(event.target.value)}
+                    placeholder="0x..."
+                  />
+                </label>
+                <label className="field">
+                  <span>Amount (plaintext units)</span>
+                  <input
+                    value={transferAmount}
+                    onChange={(event) => setTransferAmount(event.target.value)}
+                    placeholder="100"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleTransfer}
+                  disabled={
+                    !transferTo || !transferAmount || transferStatus === "loading"
+                  }
+                >
+                  {transferStatus === "loading" ? "Sending..." : "Send transfer"}
+                </button>
+              </>
+            )}
+          </section>
+        </main>
+
+        <aside className="sidebar">
+          <section className="card status-card">
+            <h2>Status</h2>
+            {!identityReady && (
+              <p className="warning">Set VITE_IDENTITY_REGISTRY_ADDRESS.</p>
+            )}
+            {!tokenReady && (
+              <p className="warning">Set VITE_COMPLIANT_ERC20_ADDRESS.</p>
+            )}
+            <div className="status-grid">
+              <div>
+                <span>Wallet</span>
+                <div className="address-row">
+                  <strong>{formatAddress(isConnected ? address : undefined)}</strong>
+                  {isConnected && (
+                    <button
+                      type="button"
+                      className="ghost"
+                      onClick={handleCopyAddress}
+                    >
+                      {copied ? "Copied" : "Copy"}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="status-row">
+                  <span>Identity</span>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={handleRefreshIdentity}
+                  >
+                    Refresh
+                  </button>
+                </div>
+                <strong className={isAttested ? "status-good" : "status-warn"}>
+                  {isAttested ? "Attested" : "Not attested"}
+                </strong>
+              </div>
+              <div>
+                <div className="status-row">
+                  <span>Mint claimed</span>
+                  <button
+                    type="button"
+                    className={`ghost ${isMintEncrypted ? "ghost-warn" : ""}`}
+                    onClick={handleRefreshMint}
+                    disabled={mintStatus === "loading"}
+                  >
+                    {mintStatus === "loading"
+                      ? "Refreshing..."
+                      : isMintEncrypted
+                      ? "Decrypt"
+                      : "Refresh"}
+                  </button>
+                </div>
+                <strong className={isMintEncrypted ? "status-warn" : ""}>
+                  {isMintEncrypted ? "Encrypted" : claimed ? "Yes" : "No"}
+                </strong>
+              </div>
             </div>
-          </div>
-          <div>
-            <span>Identity</span>
-            <strong>{isAttested ? "Attested" : "Not attested"}</strong>
-          </div>
-          <div>
-            <span>Mint claimed</span>
-            <strong>
-              {claimed === null
-                ? "Encrypted / unknown"
-                : claimed
-                ? "Yes"
-                : "No"}
-            </strong>
-          </div>
-        </div>
-        <div className="status-actions">
-          <button type="button" onClick={handleRefreshIdentity}>
-            Refresh identity
-          </button>
-          <button
-            type="button"
-            onClick={handleRefreshMint}
-            disabled={mintStatus === "loading"}
-          >
-            {mintStatus === "loading"
-              ? "Refreshing..."
-              : claimed === null
-              ? "Decrypt claimed"
-              : "Refresh mint claimed"}
-          </button>
-        </div>
-      </section>
+          </section>
 
-      <section className="card">
-        <h2>Balance</h2>
-        <p className="muted">
-          Decryption requires a signature. Balance is shown in plaintext units.
-        </p>
-        <div className="status-grid">
-          <div>
-            <span>Encrypted balance</span>
-            <strong>
-              {balance === null ? "Encrypted / unknown" : balance.toString()}
-            </strong>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleRefreshBalance}
-          disabled={balanceStatus === "loading"}
-        >
-          {balanceStatus === "loading"
-            ? "Refreshing..."
-            : balance === null
-            ? "Decrypt balance"
-            : "Refresh balance"}
-        </button>
-      </section>
-
-      <section className="card">
-        <h2>KYC</h2>
-        <p>
-          If you are not attested yet, start the Didit flow in another tab. Once
-          completed, the backend will write your identity on-chain.
-        </p>
-        {sessionUrl ? (
-          <p className="link">
-            <a href={sessionUrl} target="_blank" rel="noreferrer">
-              Open Didit verification
-            </a>
-          </p>
-        ) : (
-          <button
-            type="button"
-            onClick={handleStartKyc}
-            disabled={!isConnected || kycStatus === "loading"}
-          >
-            {kycStatus === "loading" ? "Creating session..." : "Start KYC"}
-          </button>
-        )}
-      </section>
-
-      <section className="card">
-        <h2>Claim tokens</h2>
-        <button
-          type="button"
-          onClick={handleClaim}
-          disabled={!canClaim || claimStatus === "loading"}
-        >
-          {claimStatus === "loading" ? "Claiming..." : "Claim 100 tokens"}
-        </button>
-        {!canClaim && (
-          <p className="muted">
-            You must be attested to claim. If claim status is unknown, claiming
-            will safely mint 0 when already claimed.
-          </p>
-        )}
-      </section>
-
-      <section className="card">
-        <h2>Transfer</h2>
-        <p className="muted">
-          Transfers are confidential; failed compliance results in a silent
-          transfer of 0.
-        </p>
-        <label className="field">
-          <span>Recipient address</span>
-          <input
-            value={transferTo}
-            onChange={(event) => setTransferTo(event.target.value)}
-            placeholder="0x..."
-          />
-        </label>
-        <label className="field">
-          <span>Amount (plaintext units)</span>
-          <input
-            value={transferAmount}
-            onChange={(event) => setTransferAmount(event.target.value)}
-            placeholder="100"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={handleTransfer}
-          disabled={
-            !transferTo || !transferAmount || transferStatus === "loading"
-          }
-        >
-          {transferStatus === "loading" ? "Sending..." : "Send transfer"}
-        </button>
-      </section>
+          <section className="card">
+            <h2>Balance</h2>
+            <p className="muted">
+              Decryption requires a signature. Balance is shown in plaintext units.
+            </p>
+            <div className="status-grid">
+              <div>
+                <div className="status-row">
+                  <span>Encrypted balance</span>
+                  <button
+                    type="button"
+                    className={`ghost ${isBalanceEncrypted ? "ghost-warn" : ""}`}
+                    onClick={handleRefreshBalance}
+                    disabled={balanceStatus === "loading"}
+                  >
+                    {balanceStatus === "loading"
+                      ? "Refreshing..."
+                      : isBalanceEncrypted
+                      ? "Decrypt"
+                      : "Refresh"}
+                  </button>
+                </div>
+                <strong className={isBalanceEncrypted ? "status-warn" : ""}>
+                  {isBalanceEncrypted ? "Encrypted" : balance.toString()}
+                </strong>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
 
       {error && <div className="error">{error}</div>}
     </div>
