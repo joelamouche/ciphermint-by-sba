@@ -1,56 +1,79 @@
-import { useCallback } from "react";
-import { useSignTypedData } from "wagmi";
+import { useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useReadContract, useSignTypedData } from "wagmi";
 import type { Status } from "../App";
+import { compliantErc20Abi } from "../abis/compliantErc20";
+import { COMPLIANT_ERC20_ADDRESS } from "../config";
 import { userDecryptEuint64 } from "../lib/fhevm";
 
 interface UseRefreshBalanceParams {
-  tokenAddress?: string;
-  userAddress?: string;
+  userAddress?: `0x${string}`;
   setError: (message: string | null) => void;
-  setStatus: (status: Status) => void;
   setBalance: (value: bigint | null) => void;
-  refetchBalance: () => Promise<{ data: unknown }>;
 }
 
 export function useRefreshBalance({
-  tokenAddress,
   userAddress,
   setError,
-  setStatus,
   setBalance,
-  refetchBalance,
 }: UseRefreshBalanceParams) {
   const { signTypedDataAsync } = useSignTypedData();
-  const handleRefreshBalance = useCallback(async () => {
-    if (!userAddress || !tokenAddress) {
-      setError("Connect your wallet and configure CompliantERC20 address.");
-      return;
-    }
-    setError(null);
-    setStatus("loading");
-    try {
+  const { refetch: refetchBalance } = useReadContract({
+    address: COMPLIANT_ERC20_ADDRESS,
+    abi: compliantErc20Abi,
+    functionName: "balanceOf",
+    args: userAddress ? [userAddress] : undefined,
+    query: {
+      enabled: Boolean(userAddress && COMPLIANT_ERC20_ADDRESS),
+    },
+  });
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!userAddress || !COMPLIANT_ERC20_ADDRESS) {
+        throw new Error("Connect your wallet and configure CompliantERC20 address.");
+      }
       const { data } = await refetchBalance();
+      if (data == null) {
+        throw new Error("Encrypted balance not available yet.");
+      }
       const decrypted = await userDecryptEuint64({
         encryptedValue: data ?? null,
-        contractAddress: tokenAddress,
+        contractAddress: COMPLIANT_ERC20_ADDRESS,
         userAddress,
         signTypedDataAsync,
       });
+      if (decrypted === null) {
+        setBalance(0n);
+        return;
+      }
       setBalance(decrypted);
-      setStatus("success");
-    } catch (err) {
-      setStatus("error");
+    },
+    onError: (err) => {
       setError(err instanceof Error ? err.message : "Balance refresh failed.");
-    }
-  }, [
-    userAddress,
-    tokenAddress,
-    setError,
-    setStatus,
-    setBalance,
-    signTypedDataAsync,
-    refetchBalance,
-  ]);
+    },
+  });
 
-  return { handleRefreshBalance };
+  useEffect(() => {
+    mutation.reset();
+  }, [userAddress]);
+
+  const status: Status =
+    mutation.status === "pending"
+      ? "loading"
+      : mutation.status === "success"
+      ? "success"
+      : mutation.status === "error"
+      ? "error"
+      : "idle";
+
+  const handleRefreshBalance = async () => {
+    setError(null);
+    try {
+      await mutation.mutateAsync();
+    } catch {
+      // handled in onError
+    }
+  };
+
+  return { handleRefreshBalance, status };
 }

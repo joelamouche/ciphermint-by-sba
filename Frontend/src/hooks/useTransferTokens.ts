@@ -1,4 +1,5 @@
-import { useCallback } from "react";
+import { useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useWriteContract } from "wagmi";
 import { isAddress, isHex, type Address, type Hex } from "viem";
 import type { Status } from "../App";
@@ -10,7 +11,6 @@ interface UseTransferTokensParams {
   transferTo: string;
   transferAmount: string;
   setError: (message: string | null) => void;
-  setStatus: (status: Status) => void;
   abi: unknown;
 }
 
@@ -20,18 +20,14 @@ export function useTransferTokens({
   transferTo,
   transferAmount,
   setError,
-  setStatus,
   abi,
 }: UseTransferTokensParams) {
   const { writeContractAsync } = useWriteContract();
-  const handleTransfer = useCallback(async () => {
-    if (!userAddress || !tokenAddress) {
-      setError("Connect your wallet and configure CompliantERC20 address.");
-      return;
-    }
-    setError(null);
-    setStatus("loading");
-    try {
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!userAddress || !tokenAddress) {
+        throw new Error("Connect your wallet and configure CompliantERC20 address.");
+      }
       const amountValue = BigInt(transferAmount);
       if (amountValue <= 0n) {
         throw new Error("Amount must be greater than zero.");
@@ -57,21 +53,33 @@ export function useTransferTokens({
         functionName: "transfer",
         args: [recipient, handleHex, inputProofHex],
       });
-      setStatus("success");
-    } catch (err) {
-      setStatus("error");
+    },
+    onError: (err) => {
       setError(err instanceof Error ? err.message : "Transfer failed.");
-    }
-  }, [
-    userAddress,
-    tokenAddress,
-    transferTo,
-    transferAmount,
-    setError,
-    setStatus,
-    writeContractAsync,
-    abi,
-  ]);
+    },
+  });
 
-  return { handleTransfer };
+  useEffect(() => {
+    mutation.reset();
+  }, [tokenAddress, userAddress, transferTo, transferAmount]);
+
+  const status: Status =
+    mutation.status === "pending"
+      ? "loading"
+      : mutation.status === "success"
+      ? "success"
+      : mutation.status === "error"
+      ? "error"
+      : "idle";
+
+  const handleTransfer = async () => {
+    setError(null);
+    try {
+      await mutation.mutateAsync();
+    } catch {
+      // handled in onError
+    }
+  };
+
+  return { handleTransfer, status };
 }

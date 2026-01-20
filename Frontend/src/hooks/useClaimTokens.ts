@@ -1,41 +1,58 @@
-import { useCallback } from "react";
+import { useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useWriteContract } from "wagmi";
 import type { Status } from "../App";
 
 interface UseClaimTokensParams {
   tokenAddress?: `0x${string}`;
   setError: (message: string | null) => void;
-  setStatus: (status: Status) => void;
   abi: unknown;
 }
 
 export function useClaimTokens({
   tokenAddress,
   setError,
-  setStatus,
   abi,
 }: UseClaimTokensParams) {
   const { writeContractAsync } = useWriteContract();
-  const handleClaim = useCallback(async () => {
-    if (!tokenAddress) {
-      setError("CompliantERC20 address not configured.");
-      return;
-    }
-    setError(null);
-    setStatus("loading");
-    try {
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!tokenAddress) {
+        throw new Error("CompliantERC20 address not configured.");
+      }
       await writeContractAsync({
         address: tokenAddress,
         abi: abi as any,
         functionName: "claimTokens",
         args: [],
       });
-      setStatus("success");
-    } catch (err) {
-      setStatus("error");
+    },
+    onError: (err) => {
       setError(err instanceof Error ? err.message : "Claim failed.");
-    }
-  }, [tokenAddress, setError, setStatus, writeContractAsync, abi]);
+    },
+  });
 
-  return { handleClaim };
+  useEffect(() => {
+    mutation.reset();
+  }, [tokenAddress]);
+
+  const status: Status =
+    mutation.status === "pending"
+      ? "loading"
+      : mutation.status === "success"
+      ? "success"
+      : mutation.status === "error"
+      ? "error"
+      : "idle";
+
+  const handleClaim = async () => {
+    setError(null);
+    try {
+      await mutation.mutateAsync();
+    } catch {
+      // handled in onError
+    }
+  };
+
+  return { handleClaim, status };
 }

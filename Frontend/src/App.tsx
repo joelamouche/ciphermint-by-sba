@@ -1,21 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  useAccount,
-  useChainId,
-  useReadContract,
-  useSignMessage,
-} from "wagmi";
+import { useAccount, useChainId, useSignMessage } from "wagmi";
 import {
   API_BASE_URL,
   COMPLIANT_ERC20_ADDRESS,
   IDENTITY_REGISTRY_ADDRESS,
 } from "./config";
-import { identityRegistryAbi } from "./abis/identityRegistry";
 import { compliantErc20Abi } from "./abis/compliantErc20";
 import { ActionPanel, BalanceCard, StatusCard, StepperPanel } from "./components";
 import { steps } from "./constants/steps";
 import {
   useClaimTokens,
+  useIdentityStatus,
   useKycSession,
   useRefreshBalance,
   useRefreshMint,
@@ -35,10 +30,6 @@ export default function App() {
   const chainId = useChainId();
   const { signMessageAsync } = useSignMessage();
 
-  const [claimStatus, setClaimStatus] = useState<Status>("idle");
-  const [transferStatus, setTransferStatus] = useState<Status>("idle");
-  const [mintStatus, setMintStatus] = useState<Status>("idle");
-  const [balanceStatus, setBalanceStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [claimed, setClaimed] = useState<boolean | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
@@ -49,41 +40,11 @@ export default function App() {
   const identityReady = Boolean(IDENTITY_REGISTRY_ADDRESS);
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
 
-  const { data: isAttested, refetch: refetchAttested } = useReadContract({
-    address: IDENTITY_REGISTRY_ADDRESS,
-    abi: identityRegistryAbi,
-    functionName: "isAttested",
-    args: address ? [address] : undefined,
-    query: {
-      enabled: Boolean(address && identityReady),
-    },
-  });
-
-  const { data: _claimedEncrypted, refetch: refetchClaimed } = useReadContract({
-    address: COMPLIANT_ERC20_ADDRESS,
-    abi: compliantErc20Abi,
-    functionName: "hasClaimedMint",
-    args: address ? [address] : undefined,
-    query: {
-      enabled: Boolean(address && tokenReady),
-    },
-  });
-
-  const { data: _balanceEncrypted, refetch: refetchBalance } = useReadContract({
-    address: COMPLIANT_ERC20_ADDRESS,
-    abi: compliantErc20Abi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: {
-      enabled: Boolean(address && tokenReady),
-    },
-  });
+  const { isAttested, refetchAttested } = useIdentityStatus({ address });
 
   useEffect(() => {
     setClaimed(null);
-    setMintStatus("idle");
     setBalance(null);
-    setBalanceStatus("idle");
   }, [address, COMPLIANT_ERC20_ADDRESS]);
 
   const canClaim = useMemo(() => {
@@ -112,20 +73,18 @@ export default function App() {
     await startKyc();
   }
 
-  const { handleClaim } = useClaimTokens({
+  const { handleClaim, status: claimStatus } = useClaimTokens({
     tokenAddress: COMPLIANT_ERC20_ADDRESS,
     setError,
-    setStatus: setClaimStatus,
     abi: compliantErc20Abi,
   });
 
-  const { handleTransfer } = useTransferTokens({
+  const { handleTransfer, status: transferStatus } = useTransferTokens({
     tokenAddress: COMPLIANT_ERC20_ADDRESS,
     userAddress: address,
     transferTo,
     transferAmount,
     setError,
-    setStatus: setTransferStatus,
     abi: compliantErc20Abi,
   });
 
@@ -133,22 +92,16 @@ export default function App() {
     await refetchAttested();
   }
 
-  const { handleRefreshMint } = useRefreshMint({
-    tokenAddress: COMPLIANT_ERC20_ADDRESS,
+  const { handleRefreshMint, status: mintStatus } = useRefreshMint({
     userAddress: address,
     setError,
-    setStatus: setMintStatus,
     setClaimed,
-    refetchClaimed,
   });
 
-  const { handleRefreshBalance } = useRefreshBalance({
-    tokenAddress: COMPLIANT_ERC20_ADDRESS,
+  const { handleRefreshBalance, status: balanceStatus } = useRefreshBalance({
     userAddress: address,
     setError,
-    setStatus: setBalanceStatus,
     setBalance,
-    refetchBalance,
   });
 
   async function handleCopyAddress() {
