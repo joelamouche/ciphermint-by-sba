@@ -72,9 +72,11 @@ router.post("/session", async (req: Request, res: Response) => {
       });
     }
 
-    // Store session metadata in database
-    const kycSession = await prisma.kycSession.create({
-      data: {
+    // Store session metadata in database (idempotent on diditSessionId)
+    const kycSession = await prisma.kycSession.upsert({
+      where: { diditSessionId: diditSession.sessionId },
+      update: {},
+      create: {
         walletAddress: walletAddress.toLowerCase(),
         diditSessionId: diditSession.sessionId,
         status: "CREATED",
