@@ -10,7 +10,7 @@ A Confidential RWA POC by Stevens Blockchain Advisory
 
 * We *don’t store PII* on backend.
 * Backend only writes a user’s **“FirstName LastName” string** into **Zama IdentityRegistry** tied to wallet address.
-* A name must be *globally unique* (enforced off-chain then on-chain error on duplicates).
+* A name must be *globally unique* (enforced on-chain, not by the backend).
 * Minting is allowed once per address with a verified name in the IdentityRegistry.
 * Confidential token transfers only allowed between addresses that have a verified name on-chain.
 
@@ -97,25 +97,18 @@ make clean
    * Frontend triggers **Didit KYC** (hosted link or API session). ([Didit][2])
    * Upon completion, backend receives webhook with success & extracted name.
 
-4. **Name uniqueness check**
-
-   * Backend checks off-chain index:
-
-     * If *name already exists* tied to another address → return error to frontend.
-     * If unique → proceed.
-
-5. **Write to IdentityRegistry**
+4. **Write to IdentityRegistry**
 
    * Backend writes `identity string` (name) to IdentityRegistry, linked with wallet address.
    * No PII or documents stored in your backend.
 
-6. **Mint**
+5. **Mint**
 
    * Frontend calls CompliantERC20 mint (100 tokens).
    * Contract checks eligibility in IdentityRegistry.
    * Balance (encrypted) is updated confidentially.
 
-7. **Transfers**
+6. **Transfers**
 
    * Sending allowed only between addresses with verified names on-chain.
    * Address can *see which addresses* have names via encrypted flags, but *not which name*.

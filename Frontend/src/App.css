@@ -14,6 +14,11 @@
   gap: 16px;
 }
 
+.topbar-actions {
+  display: flex;
+  gap: 16px;
+}
+
 h1,
 h2 {
   margin: 0 0 8px;
@@ -168,6 +173,31 @@ button.ghost {
   font-size: 0.85rem;
 }
 
+button.ghost.active {
+  border-color: #5b5bff;
+  color: #ffffff;
+}
+
+.nav-link {
+  background: transparent;
+  border: none;
+  color: #c7c7d1;
+  padding: 4px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+
+.nav-link:hover {
+  color: #ffffff;
+}
+
+.nav-link.active {
+  color: #ffffff;
+  border-bottom-color: #5b5bff;
+}
+
 button.ghost:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -240,6 +270,37 @@ input {
   color: #ffffff;
   text-decoration: none;
   font-weight: 600;
+}
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.about-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #e4e4e7;
+}
+
+.about-list li {
+  margin-bottom: 6px;
+}
+
+.about-architecture {
+  display: grid;
+  gap: 12px;
+}
+
+.about-architecture div {
+  display: grid;
+  gap: 4px;
+}
+
+.about-architecture span {
+  color: #a1a1aa;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 960px) {

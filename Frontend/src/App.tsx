@@ -6,7 +6,13 @@ import {
   IDENTITY_REGISTRY_ADDRESS,
 } from "./config";
 import { compliantErc20Abi } from "./abis/compliantErc20";
-import { ActionPanel, BalanceCard, StatusCard, StepperPanel } from "./components";
+import {
+  AboutPage,
+  ActionPanel,
+  BalanceCard,
+  StatusCard,
+  StepperPanel,
+} from "./components";
 import { steps } from "./constants/steps";
 import {
   useClaimTokens,
@@ -36,6 +42,7 @@ export default function App() {
   const [transferTo, setTransferTo] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [copied, setCopied] = useState(false);
+  const [activePage, setActivePage] = useState<"app" | "about">("app");
 
   const identityReady = Boolean(IDENTITY_REGISTRY_ADDRESS);
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
@@ -119,55 +126,75 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <h1>CipherMint</h1>
+        <nav className="topbar-actions" aria-label="Primary">
+          <button
+            type="button"
+            className={`nav-link ${activePage === "app" ? "active" : ""}`}
+            onClick={() => setActivePage("app")}
+          >
+            Dashboard
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${activePage === "about" ? "active" : ""}`}
+            onClick={() => setActivePage("about")}
+          >
+            About
+          </button>
+        </nav>
       </header>
 
-      <div className="layout">
-        <main className="main">
-          <StepperPanel steps={steps} activeStepId={activeStepId} />
+      {activePage === "about" ? (
+        <AboutPage />
+      ) : (
+        <div className="layout">
+          <main className="main">
+            <StepperPanel steps={steps} activeStepId={activeStepId} />
 
-          <ActionPanel
-            activeStepId={activeStepId}
-            isConnected={isConnected}
-            sessionUrl={sessionUrl}
-            kycStatus={kycStatus}
-            canClaim={canClaim}
-            claimStatus={claimStatus}
-            transferTo={transferTo}
-            transferAmount={transferAmount}
-            transferStatus={transferStatus}
-            onStartKyc={handleStartKyc}
-            onClaim={handleClaim}
-            onTransferToChange={setTransferTo}
-            onTransferAmountChange={setTransferAmount}
-            onTransfer={handleTransfer}
-          />
-        </main>
+            <ActionPanel
+              activeStepId={activeStepId}
+              isConnected={isConnected}
+              sessionUrl={sessionUrl}
+              kycStatus={kycStatus}
+              canClaim={canClaim}
+              claimStatus={claimStatus}
+              transferTo={transferTo}
+              transferAmount={transferAmount}
+              transferStatus={transferStatus}
+              onStartKyc={handleStartKyc}
+              onClaim={handleClaim}
+              onTransferToChange={setTransferTo}
+              onTransferAmountChange={setTransferAmount}
+              onTransfer={handleTransfer}
+            />
+          </main>
 
-        <aside className="sidebar">
-          <StatusCard
-            address={address}
-            isConnected={isConnected}
-            isAttested={isAttested}
-            claimed={claimed}
-            copied={copied}
-            identityReady={identityReady}
-            tokenReady={tokenReady}
-            isMintEncrypted={isMintEncrypted}
-            mintStatus={mintStatus}
-            onCopyAddress={handleCopyAddress}
-            onRefreshIdentity={handleRefreshIdentity}
-            onRefreshMint={handleRefreshMint}
-            formatAddress={formatAddress}
-          />
+          <aside className="sidebar">
+            <StatusCard
+              address={address}
+              isConnected={isConnected}
+              isAttested={isAttested}
+              claimed={claimed}
+              copied={copied}
+              identityReady={identityReady}
+              tokenReady={tokenReady}
+              isMintEncrypted={isMintEncrypted}
+              mintStatus={mintStatus}
+              onCopyAddress={handleCopyAddress}
+              onRefreshIdentity={handleRefreshIdentity}
+              onRefreshMint={handleRefreshMint}
+              formatAddress={formatAddress}
+            />
 
-          <BalanceCard
-            balance={balance}
-            isBalanceEncrypted={isBalanceEncrypted}
-            balanceStatus={balanceStatus}
-            onRefreshBalance={handleRefreshBalance}
-          />
-        </aside>
-      </div>
+            <BalanceCard
+              balance={balance}
+              isBalanceEncrypted={isBalanceEncrypted}
+              balanceStatus={balanceStatus}
+              onRefreshBalance={handleRefreshBalance}
+            />
+          </aside>
+        </div>
+      )}
 
       {error && <div className="error">{error}</div>}
     </div>
