@@ -24,6 +24,46 @@ h2 {
   margin: 0 0 8px;
 }
 
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-logo {
+  height: 3em;
+  width: auto;
+  object-fit: contain;
+}
+
+.brand-logo-link {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.brand-title {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.brand-by {
+  color: #a1a1aa;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.brand-link {
+  color: #fde8b1;
+  text-decoration: none;
+}
+
+.brand-link:hover {
+  color: #ffffff;
+}
+
 .card {
   background: #141420;
   padding: 20px;
