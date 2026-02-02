@@ -86,9 +86,19 @@ export function ActionPanel({
           <button
             type="button"
             onClick={onClaim}
-            disabled={!canClaim || claimStatus === "loading"}
+            disabled={
+              !canClaim ||
+              claimStatus === "loading" ||
+              claimStatus === "success"
+            }
           >
-            {claimStatus === "loading" ? "Claiming..." : "Claim 100 tokens"}
+            {claimStatus === "loading"
+              ? "Claiming..."
+              : claimStatus === "success"
+              ? "Claimed"
+              : claimStatus === "error"
+              ? "Retry claim"
+              : "Claim 100 tokens"}
           </button>
         </>
       )}
