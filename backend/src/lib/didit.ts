@@ -42,7 +42,8 @@ export async function createDiditSession(
 ): Promise<CreateDiditSessionResponse> {
   const diditApiKey = process.env.DIDIT_API_KEY;
   const diditWorkflowId = process.env.DIDIT_WORKFLOW_ID;
-  const diditCallbackUrl = process.env.DIDIT_CALLBACK_URL;
+  const diditCallbackUrl =
+    process.env.DIDIT_CALLBACK_URL || "https://ciphermint.stevensba.com/";
   const diditBaseUrl =
     process.env.DIDIT_API_URL || "https://verification.didit.me";
 
@@ -67,9 +68,7 @@ export async function createDiditSession(
     vendor_data: request.walletAddress.toLowerCase(),
   };
 
-  if (diditCallbackUrl) {
-    body.callback = diditCallbackUrl;
-  }
+  body.callback = diditCallbackUrl;
 
   const response = await fetch(url, {
     method: "POST",

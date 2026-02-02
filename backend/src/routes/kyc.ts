@@ -161,12 +161,27 @@ router.post("/webhook", async (req: Request, res: Response) => {
       return res.status(200).json({ ok: true });
     }
 
-    // Idempotency: if not in CREATED state, do nothing
-    if (kycSession.status !== "CREATED") {
+    // Idempotency: if already terminal, do nothing
+    if (!["CREATED", "IN_PROGRESS"].includes(kycSession.status)) {
       return res.status(200).json({ ok: true });
     }
 
     const normalizedStatus = status.toLowerCase();
+
+    // If in progress, mark session accordingly
+    if (
+      normalizedStatus === "in progress" ||
+      normalizedStatus === "in_progress" ||
+      normalizedStatus === "in-progress"
+    ) {
+      if (kycSession.status !== "IN_PROGRESS") {
+        await prisma.kycSession.update({
+          where: { id: kycSession.id },
+          data: { status: "IN_PROGRESS" },
+        });
+      }
+      return res.status(200).json({ ok: true });
+    }
 
     // If failed, mark session as FAILED
     if (normalizedStatus === "failed") {
