@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useWriteContract } from "wagmi";
-import { isAddress, isHex, type Address, type Hex } from "viem";
+import { isAddress, isHex, toHex, type Address, type Hex } from "viem";
 import type { Status } from "../App";
 import { encryptUint64 } from "../lib/fhevm";
 
@@ -23,10 +23,27 @@ export function useTransferTokens({
   abi,
 }: UseTransferTokensParams) {
   const { writeContractAsync } = useWriteContract();
+  const normalizeHex = (value: unknown): Hex | null => {
+    if (typeof value === "string") {
+      return isHex(value) ? (value as Hex) : null;
+    }
+    if (value instanceof Uint8Array) {
+      return toHex(value);
+    }
+    if (value instanceof ArrayBuffer) {
+      return toHex(new Uint8Array(value));
+    }
+    if (Array.isArray(value) && value.every((item) => Number.isInteger(item))) {
+      return toHex(new Uint8Array(value));
+    }
+    return null;
+  };
   const mutation = useMutation({
     mutationFn: async () => {
       if (!userAddress || !tokenAddress) {
-        throw new Error("Connect your wallet and configure CompliantERC20 address.");
+        throw new Error(
+          "Connect your wallet and configure CompliantERC20 address."
+        );
       }
       const amountValue = BigInt(transferAmount);
       if (amountValue <= 0n) {
@@ -40,12 +57,12 @@ export function useTransferTokens({
       if (!isAddress(transferTo)) {
         throw new Error("Recipient address is invalid.");
       }
-      if (!isHex(handle) || !isHex(inputProof)) {
+      const handleHex = normalizeHex(handle);
+      const inputProofHex = normalizeHex(inputProof);
+      if (!handleHex || !inputProofHex) {
         throw new Error("Encrypted payload is invalid.");
       }
       const recipient = transferTo as Address;
-      const handleHex = handle as Hex;
-      const inputProofHex = inputProof as Hex;
 
       await writeContractAsync({
         address: tokenAddress,

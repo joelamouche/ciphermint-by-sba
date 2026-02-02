@@ -191,6 +191,12 @@ h2 {
   color: #fef08a;
 }
 
+.status-center {
+  text-align: center;
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
 .address-row {
   display: flex;
   align-items: center;

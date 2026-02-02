@@ -136,6 +136,9 @@ export function ActionPanel({
               placeholder="100"
             />
           </label>
+          {transferStatus === "success" && (
+            <p className="status-good status-center">Transfer sent</p>
+          )}
           <button
             type="button"
             onClick={onTransfer}
@@ -143,7 +146,13 @@ export function ActionPanel({
               !transferTo || !transferAmount || transferStatus === "loading"
             }
           >
-            {transferStatus === "loading" ? "Sending..." : "Send transfer"}
+            {transferStatus === "loading"
+              ? "Sending..."
+              : transferStatus === "success"
+              ? "Send another transfer"
+              : transferStatus === "error"
+              ? "Retry transfer"
+              : "Send transfer"}
           </button>
         </>
       )}
