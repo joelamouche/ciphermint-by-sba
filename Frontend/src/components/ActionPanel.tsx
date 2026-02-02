@@ -7,6 +7,7 @@ interface ActionPanelProps {
   activeStepId: ActionStep;
   isConnected: boolean;
   sessionUrl: string | null;
+  kycSessionStatus: "created" | "in_progress" | "done" | null;
   kycStatus: Status;
   canClaim: boolean;
   claimStatus: Status;
@@ -14,6 +15,7 @@ interface ActionPanelProps {
   transferAmount: string;
   transferStatus: Status;
   onStartKyc: () => void;
+  onOpenKyc: () => void;
   onClaim: () => void;
   onTransferToChange: (value: string) => void;
   onTransferAmountChange: (value: string) => void;
@@ -24,6 +26,7 @@ export function ActionPanel({
   activeStepId,
   isConnected,
   sessionUrl,
+  kycSessionStatus,
   kycStatus,
   canClaim,
   claimStatus,
@@ -31,6 +34,7 @@ export function ActionPanel({
   transferAmount,
   transferStatus,
   onStartKyc,
+  onOpenKyc,
   onClaim,
   onTransferToChange,
   onTransferAmountChange,
@@ -56,14 +60,20 @@ export function ActionPanel({
             writes your identity on-chain.
           </p>
           {sessionUrl ? (
-            <a
-              className="primary-link"
-              href={sessionUrl}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={onOpenKyc}
+              disabled={
+                kycSessionStatus === "in_progress" ||
+                kycSessionStatus === "done"
+              }
             >
-              Open Didit verification
-            </a>
+              {kycSessionStatus === "in_progress"
+                ? "Verification in progress"
+                : kycSessionStatus === "done"
+                ? "Verification complete"
+                : "Open Didit verification"}
+            </button>
           ) : (
             <button
               type="button"

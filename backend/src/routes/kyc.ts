@@ -90,9 +90,10 @@ router.post("/session", async (req: Request, res: Response) => {
       } for wallet: ${walletAddress.substring(0, 10)}...`
     );
 
-    // Return session URL
+    // Return session URL and session id for status polling
     res.json({
       sessionUrl: diditSession.sessionUrl,
+      sessionId: kycSession.id,
     });
   } catch (error) {
     console.error("Error creating KYC session:", error);
@@ -279,6 +280,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
     //     return res.status(200).json({ ok: true });
     //   }
     // }
+    console.log("extractedName", extractedName);
 
     // Write identity to Zama IdentityRegistry on-chain
     if (contractAddress) {
@@ -333,6 +335,41 @@ router.post("/webhook", async (req: Request, res: Response) => {
     return res.status(200).json({ ok: true });
   } catch (error) {
     console.error("Error handling Didit webhook:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/kyc/session/:id/status
+ * Return KYC session status. Terminal states are obscured as "done".
+ */
+router.get("/session/:id/status", async (req: Request, res: Response) => {
+  try {
+    const idParam = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+
+    if (!idParam) {
+      return res.status(400).json({ error: "Missing kyc session id" });
+    }
+
+    const kycSession = await prisma.kycSession.findUnique({
+      where: { id: idParam },
+      select: { status: true },
+    });
+
+    if (!kycSession) {
+      return res.status(404).json({ error: "KYC session not found" });
+    }
+
+    const status =
+      kycSession.status === "FAILED" || kycSession.status === "VERIFIED"
+        ? "done"
+        : kycSession.status.toLowerCase();
+
+    return res.json({ status });
+  } catch (error) {
+    console.error("Error fetching KYC session status:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });

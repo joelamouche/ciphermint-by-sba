@@ -16,8 +16,9 @@ import {
 import { steps } from "./constants/steps";
 import {
   useClaimTokens,
+  useGetKycSession,
   useIdentityStatus,
-  useKycSession,
+  useStartKycSession,
   useRefreshBalance,
   useRefreshMint,
   useTransferTokens,
@@ -43,6 +44,7 @@ export default function App() {
   const [transferAmount, setTransferAmount] = useState("");
   const [copied, setCopied] = useState(false);
   const [activePage, setActivePage] = useState<"app" | "about">("app");
+  const [kycPollingEnabled, setKycPollingEnabled] = useState(false);
 
   const identityReady = Boolean(IDENTITY_REGISTRY_ADDRESS);
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
@@ -68,16 +70,42 @@ export default function App() {
     return "claim";
   }, [isConnected, isAttested, claimed]);
 
-  const { startKyc, status: kycStatus, sessionUrl } = useKycSession({
+  const {
+    startKyc,
+    status: kycStatus,
+    sessionUrl,
+    sessionId,
+  } = useStartKycSession({
     address,
     chainId,
     signMessageAsync,
     onError: (message) => setError(message),
   });
 
+  const { status: kycSessionStatus } = useGetKycSession({
+    sessionId,
+    enabled: kycPollingEnabled,
+    onDone: () => {
+      setKycPollingEnabled(false);
+      refetchAttested();
+    },
+  });
+
+  useEffect(() => {
+    if (!sessionUrl) {
+      setKycPollingEnabled(false);
+    }
+  }, [sessionUrl]);
+
   async function handleStartKyc() {
     setError(null);
     await startKyc();
+  }
+
+  function handleOpenKyc() {
+    if (!sessionUrl) return;
+    window.open(sessionUrl, "_blank", "noopener,noreferrer");
+    setKycPollingEnabled(true);
   }
 
   const { handleClaim, status: claimStatus } = useClaimTokens({
@@ -179,6 +207,7 @@ export default function App() {
               activeStepId={activeStepId}
               isConnected={isConnected}
               sessionUrl={sessionUrl}
+              kycSessionStatus={kycSessionStatus}
               kycStatus={kycStatus}
               canClaim={canClaim}
               claimStatus={claimStatus}
@@ -186,6 +215,7 @@ export default function App() {
               transferAmount={transferAmount}
               transferStatus={transferStatus}
               onStartKyc={handleStartKyc}
+              onOpenKyc={handleOpenKyc}
               onClaim={handleClaim}
               onTransferToChange={setTransferTo}
               onTransferAmountChange={setTransferAmount}

@@ -13,9 +13,10 @@ interface UseKycSessionParams {
 
 interface KycSessionResponse {
   sessionUrl: string;
+  sessionId: string;
 }
 
-export function useKycSession({
+export function useStartKycSession({
   address,
   chainId,
   signMessageAsync,
@@ -93,5 +94,6 @@ export function useKycSession({
     startKyc,
     status,
     sessionUrl: mutation.data?.sessionUrl ?? null,
+    sessionId: mutation.data?.sessionId ?? null,
   };
 }
