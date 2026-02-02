@@ -6,4 +6,3 @@ export const IDENTITY_REGISTRY_ADDRESS =
 export const COMPLIANT_ERC20_ADDRESS =
   (import.meta.env.VITE_COMPLIANT_ERC20_ADDRESS as `0x${string}` | undefined) ??
   undefined;
-export const RPC_URL = import.meta.env.VITE_RPC_URL ?? undefined;

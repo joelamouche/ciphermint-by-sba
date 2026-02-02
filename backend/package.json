@@ -13,7 +13,8 @@
     "prisma:format": "prisma format",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "INTEGRATION_TESTS_ENABLED=true vitest run --config=vitest.integration.config.ts"
+    "test:integration": "INTEGRATION_TESTS_ENABLED=true vitest run --config=vitest.integration.config.ts",
+    "deploy:heroku": "bash scripts/deploy-heroku.sh"
   },
   "keywords": [],
   "author": "",

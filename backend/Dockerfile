@@ -3,6 +3,9 @@ WORKDIR /app
 
 RUN apk add --no-cache openssl
 
+# Prisma needs DATABASE_URL during generate; runtime uses Heroku config.
+ENV DATABASE_URL="postgresql://user:password@localhost:5432/ciphermint?schema=public"
+
 COPY package.json package-lock.json ./
 RUN npm ci
 

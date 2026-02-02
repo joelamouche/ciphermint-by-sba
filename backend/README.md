@@ -18,6 +18,58 @@
 
 ---
 
+# 🚀 Deployment (Heroku)
+
+### Prereqs
+
+* Heroku CLI installed + logged in
+* `DATABASE_URL` already set on the Heroku app (e.g., via `heroku addons:create heroku-postgresql`)
+
+### Configure env
+
+Create `backend/.env.deploy` with the production values (do **not** include `DATABASE_URL`):
+
+```
+NODE_ENV=production
+DIDIT_API_KEY=...
+DIDIT_WORKFLOW_ID=...
+DIDIT_WEBHOOK_SECRET=...
+ZAMA_IDENTITY_REGISTRY_ADDRESS=0x...
+ZAMA_REGISTRAR_PRIVATE_KEY=0x...
+ZAMA_RPC_URL=...
+ZAMA_CHAIN_ID=11155111
+```
+
+### Deploy
+
+From the `backend` folder:
+
+```
+npm run deploy:heroku
+```
+
+### Initialize database schema (first deploy only)
+
+Since no migrations are included, push the Prisma schema:
+
+```
+heroku run -a ciphermint-api npx prisma db push
+```
+
+### Prisma in production (best practice)
+
+* **Use migrations for prod**: generate migrations locally with `npx prisma migrate dev` and commit the `prisma/migrations` folder.
+* **Deploy migrations**: once migrations exist, run `npx prisma migrate deploy` on Heroku and stop using `db push` in prod.
+* **Create the client in CI/build**: `prisma generate` is already run during the Docker build.
+
+Example once migrations exist:
+
+```
+heroku run -a ciphermint-api npx prisma migrate deploy
+```
+
+---
+
 # 🧾 Backend Spec — CipherMint Phase 1
 
 ## 👤 User Identity Flow

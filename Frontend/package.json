@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "build:deploy": "tsc -b && vite build --mode deploy",
+    "preview": "vite preview",
+    "deploy:heroku": "./scripts/deploy-heroku.sh"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.1",
