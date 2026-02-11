@@ -30,6 +30,12 @@ h2 {
   gap: 12px;
 }
 
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .brand-logo {
   height: 3em;
   width: auto;
@@ -47,6 +53,25 @@ h2 {
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+
+.brand-subtitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: #d4d4d8;
+}
+
+.brand-subtitle-text {
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+
+.brand-subtitle-logo {
+  height: 1.2em;
+  width: auto;
+  object-fit: contain;
 }
 
 .brand-by {

@@ -280,7 +280,8 @@ router.post("/webhook", async (req: Request, res: Response) => {
     //     return res.status(200).json({ ok: true });
     //   }
     // }
-    console.log("extractedName", extractedName);
+
+    // console.log("extractedName", extractedName);
 
     // Write identity to Zama IdentityRegistry on-chain
     if (contractAddress) {

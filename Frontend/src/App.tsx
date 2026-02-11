@@ -166,17 +166,27 @@ export default function App() {
               alt="SBA logo"
             />
           </a>
-          <h1 className="brand-title">
-            CipherMint <span className="brand-by">by</span>{" "}
-            <a
-              className="brand-link"
-              href="https://stevensba.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              SBA
-            </a>
-          </h1>
+          <div className="brand-text">
+            <h1 className="brand-title">
+              CipherMint <span className="brand-by">by</span>{" "}
+              <a
+                className="brand-link"
+                href="https://stevensba.com"
+                target="_blank"
+                rel="noreferrer"
+              >
+                SBA
+              </a>
+            </h1>
+            <div className="brand-subtitle">
+              <span className="brand-subtitle-text">using zama</span>
+              <img
+                className="brand-subtitle-logo"
+                src="/zama-logo.png"
+                alt="Zama logo"
+              />
+            </div>
+          </div>
         </div>
         <nav className="topbar-actions" aria-label="Primary">
           <button
