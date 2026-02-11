@@ -216,6 +216,7 @@ export default function App() {
             <ActionPanel
               activeStepId={activeStepId}
               isConnected={isConnected}
+              userAddress={address}
               sessionUrl={sessionUrl}
               kycSessionStatus={kycSessionStatus}
               kycStatus={kycStatus}

@@ -25,13 +25,8 @@ For FHEVM development details, see:
 2. **Set up environment variables**
 
    ```bash
-   npx hardhat vars set MNEMONIC
-
-   # Set your Infura API key for network access
-   npx hardhat vars set INFURA_API_KEY
-
-   # Optional: Set Etherscan API key for contract verification
-   npx hardhat vars set ETHERSCAN_API_KEY
+   cp .env.example .env
+   # Edit .env and set MNEMONIC, INFURA_API_KEY, ETHERSCAN_API_KEY (optional)
    ```
 
 3. **Compile and test**
@@ -53,17 +48,26 @@ For FHEVM development details, see:
 5. **Deploy to Sepolia Testnet**
 
    ```bash
-   # Deploy to Sepolia
-   npx hardhat deploy --network sepolia
+   # Deploy full suite (deploy.ts only)
+   npm run deploy:sepolia
    # Verify contract on Etherscan
    npx hardhat verify --network sepolia <CONTRACT_ADDRESS>
+   ```
+
+   To deploy only the IdentityRegistry:
+
+   ```bash
+   npx hardhat deploy --network sepolia --tags IdentityRegistry
    ```
 
 ### Sepolia Deployments
 
 - `IdentityRegistry`: `0x776CAFDe491cD1F5f23278B479F49DbE81c9631D`
 - `ComplianceRules`: `0xbB596231fBe70dC6e5e373Cea835a274A08E582E`
-- `CompliantERC20`: `0x9e13267024e57593a1C5604026E1c8EaF4437300`
+- `CompliantERC20`: `0x45Ca0B75409b018d354556304ffE1143CAa1a738`
+
+Frontend env (Sepolia):
+- `VITE_COMPLIANT_ERC20_ADDRESS=0x45Ca0B75409b018d354556304ffE1143CAa1a738`
 
 6. **Test on Sepolia Testnet**
 

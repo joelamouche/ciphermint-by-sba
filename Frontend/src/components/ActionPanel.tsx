@@ -6,6 +6,7 @@ type ActionStep = "connect" | "verify" | "claim" | "transfer";
 interface ActionPanelProps {
   activeStepId: ActionStep;
   isConnected: boolean;
+  userAddress?: string;
   sessionUrl: string | null;
   kycSessionStatus: "created" | "in_progress" | "done" | null;
   kycStatus: Status;
@@ -25,6 +26,7 @@ interface ActionPanelProps {
 export function ActionPanel({
   activeStepId,
   isConnected,
+  userAddress,
   sessionUrl,
   kycSessionStatus,
   kycStatus,
@@ -40,6 +42,13 @@ export function ActionPanel({
   onTransferAmountChange,
   onTransfer,
 }: ActionPanelProps) {
+  const normalizedUserAddress = userAddress?.toLowerCase();
+  const normalizedTransferTo = transferTo.trim().toLowerCase();
+  const isSelfTransfer =
+    Boolean(normalizedUserAddress) &&
+    Boolean(normalizedTransferTo) &&
+    normalizedUserAddress === normalizedTransferTo;
+
   return (
     <section className="card panel">
       {activeStepId === "connect" && (
@@ -128,6 +137,11 @@ export function ActionPanel({
               placeholder="0x..."
             />
           </label>
+          {isSelfTransfer && (
+            <p className="status-warn status-center">
+              You cannot send tokens to your own address.
+            </p>
+          )}
           <label className="field">
             <span>Amount (plaintext units)</span>
             <input
@@ -143,7 +157,10 @@ export function ActionPanel({
             type="button"
             onClick={onTransfer}
             disabled={
-              !transferTo || !transferAmount || transferStatus === "loading"
+              !transferTo ||
+              !transferAmount ||
+              transferStatus === "loading" ||
+              isSelfTransfer
             }
           >
             {transferStatus === "loading"

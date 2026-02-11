@@ -86,7 +86,7 @@
     "typechain": "cross-env TS_NODE_TRANSPILE_ONLY=true hardhat typechain",
     "chain": "hardhat node --network hardhat --no-deploy",
     "deploy:localhost": "hardhat deploy --network localhost",
-    "deploy:sepolia": "hardhat deploy --network sepolia",
+    "deploy:sepolia": "hardhat deploy --network sepolia --tags Ciphermint",
     "verify:sepolia": "hardhat verify --network sepolia"
   },
   "overrides": {
