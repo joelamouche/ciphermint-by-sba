@@ -324,6 +324,18 @@ describe("Full Integration Flow", function () {
       expect(decryptedAliceBalance).to.equal(MINT_AMOUNT + CLAIM_AMOUNT - TRANSFER_AMOUNT);
     });
 
+    it("should revert when transferring to self", async function () {
+      const encrypted = fhevm.createEncryptedInput(tokenAddress, signers.alice.address);
+      encrypted.add64(TRANSFER_AMOUNT);
+      const encryptedInput = await encrypted.encrypt();
+
+      await expect(
+        token
+          .connect(signers.alice)
+          ["transfer(address,bytes32,bytes)"](signers.alice.address, encryptedInput.handles[0], encryptedInput.inputProof),
+      ).to.be.revertedWithCustomError(token, "SelfTransferNotAllowed");
+    });
+
     it("should reject transfer with unauthorized ciphertext handle", async function () {
       const aliceBalanceHandle = await token.balanceOf(signers.alice.address);
 

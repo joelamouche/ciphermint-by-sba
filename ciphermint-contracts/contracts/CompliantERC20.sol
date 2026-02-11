@@ -114,6 +114,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
     error UnauthorizedCiphertext();
     /// @notice Thrown when mint amount would exceed uint64 accounting bounds
     error TotalSupplyOverflow();
+    /// @notice Thrown when sender attempts to transfer to self
+    error SelfTransferNotAllowed();
 
     // ============ Constructor ============
 
@@ -370,6 +372,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
      */
     function _transfer(address from, address to, euint64 amount) internal returns (bool success) {
         ebool canTransfer;
+
+        if (from == to) revert SelfTransferNotAllowed();
 
         // Check compliance if checker is set
         if (address(complianceChecker) != address(0)) {

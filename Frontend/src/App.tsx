@@ -179,7 +179,7 @@ export default function App() {
               </a>
             </h1>
             <div className="brand-subtitle">
-              <span className="brand-subtitle-text">using zama</span>
+              <span className="brand-subtitle-text">using Zama</span>
               <img
                 className="brand-subtitle-logo"
                 src="/zama-logo.png"
