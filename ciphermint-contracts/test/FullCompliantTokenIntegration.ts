@@ -375,5 +375,93 @@ describe("Full Integration Flow", function () {
 
       expect(aliceBalanceAfterDecrypted).to.equal(aliceBalanceBeforeDecrypted);
     });
+
+    it("should not accrue monthly income before initial claimTokens", async function () {
+      // Bob has been attested and has a balance from transfers but has never called claimTokens
+      const claimable = await token.claimableMonthlyIncome(signers.bob.address);
+      expect(claimable).to.equal(0n);
+
+      const balanceBefore = await token.connect(signers.bob).balanceOf(signers.bob.address);
+      const decryptedBefore = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceBefore,
+        tokenAddress,
+        signers.bob,
+      );
+
+      await token.connect(signers.bob).claimMonthlyIncome();
+
+      const balanceAfter = await token.connect(signers.bob).balanceOf(signers.bob.address);
+      const decryptedAfter = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceAfter,
+        tokenAddress,
+        signers.bob,
+      );
+
+      expect(decryptedAfter).to.equal(decryptedBefore);
+    });
+
+    it("should have zero monthly income immediately after claim", async function () {
+      // Alice already called claimTokens in a previous test
+      const claimable = await token.claimableMonthlyIncome(signers.alice.address);
+      expect(claimable).to.equal(0n);
+
+      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedBefore = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceBefore,
+        tokenAddress,
+        signers.alice,
+      );
+
+      await token.connect(signers.alice).claimMonthlyIncome();
+
+      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedAfter = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceAfter,
+        tokenAddress,
+        signers.alice,
+      );
+
+      expect(decryptedAfter).to.equal(decryptedBefore);
+    });
+
+    it("should accrue and allow claiming monthly income after enough blocks", async function () {
+      const blocksPerMonth = await token.BLOCKS_PER_MONTH();
+      const monthlyIncome = await token.MONTHLY_INCOME();
+
+      // Mine one full "month" worth of blocks
+      const blocksHex = "0x" + blocksPerMonth.toString(16);
+      await ethers.provider.send("hardhat_mine", [blocksHex]);
+
+      const claimable = await token.claimableMonthlyIncome(signers.alice.address);
+      expect(claimable).to.equal(monthlyIncome);
+
+      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedBefore = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceBefore,
+        tokenAddress,
+        signers.alice,
+      );
+
+      await token.connect(signers.alice).claimMonthlyIncome();
+
+      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedAfter = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceAfter,
+        tokenAddress,
+        signers.alice,
+      );
+
+      expect(decryptedAfter).to.equal(decryptedBefore + monthlyIncome);
+
+      // After claiming, there should be no more income immediately available
+      const claimableAfter = await token.claimableMonthlyIncome(signers.alice.address);
+      expect(claimableAfter).to.equal(0n);
+    });
   });
 });

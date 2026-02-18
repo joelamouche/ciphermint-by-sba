@@ -45,8 +45,12 @@ contract CompliantERC20 is ZamaEthereumConfig {
 
     /// @notice Total supply (public for transparency)
     uint256 public totalSupply;
-    /// @notice Claimable mint amount (plaintext units)
+    /// @notice One-time claim amount (plaintext units)
     uint64 public constant CLAIM_AMOUNT = 100;
+    /// @notice Monthly income amount (plaintext units)
+    uint64 public constant MONTHLY_INCOME = 10;
+    /// @notice Approximate number of blocks per month (for income accrual)
+    uint64 public constant BLOCKS_PER_MONTH = 216_000;
 
     // ============ Token State ============
 
@@ -57,6 +61,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
     mapping(address owner => mapping(address spender => euint64 allowance)) private allowances;
     /// @notice Encrypted one-time mint claim status
     mapping(address account => ebool claimedMint) private claimedMints;
+    /// @notice Block number when monthly income was last claimed / UBI accrual started
+    mapping(address account => uint64 lastIncomeBlock) public lastIncomeBlock;
 
     // ============ Compliance State ============
 
@@ -216,6 +222,54 @@ contract CompliantERC20 is ZamaEthereumConfig {
         FHE.allowThis(newClaimed);
         FHE.allow(newClaimed, msg.sender);
 
+        // Initialize UBI accrual window on first interaction
+        if (lastIncomeBlock[msg.sender] == 0) {
+            lastIncomeBlock[msg.sender] = uint64(block.number);
+        }
+
+        return true;
+    }
+
+    /**
+     * @notice Claim accrued monthly income if compliant
+     * @dev Uses approximate block-based months; failure to meet compliance mints 0.
+     * @return success Always true
+     */
+    function claimMonthlyIncome() external returns (bool success) {
+        if (address(complianceChecker) == address(0)) revert ComplianceCheckerNotSet();
+
+        uint64 lastBlock = lastIncomeBlock[msg.sender];
+        // Not enrolled / no accrual started yet (must have called claimTokens first)
+        if (lastBlock == 0) {
+            return true;
+        }
+
+        if (block.number < lastBlock) {
+            return true;
+        }
+
+        uint256 blocksElapsed = block.number - lastBlock;
+        uint64 monthsElapsed = uint64(blocksElapsed / BLOCKS_PER_MONTH);
+
+        if (monthsElapsed == 0) {
+            return true;
+        }
+
+        uint64 plainIncome = MONTHLY_INCOME * monthsElapsed;
+
+        ebool isCompliant = complianceChecker.checkCompliance(msg.sender);
+
+        euint64 incomeAmount = FHE.asEuint64(plainIncome);
+        euint64 mintAmount = FHE.select(isCompliant, incomeAmount, FHE.asEuint64(0));
+
+        euint64 newBalance = FHE.add(balances[msg.sender], mintAmount);
+        balances[msg.sender] = newBalance;
+        FHE.allowThis(newBalance);
+        FHE.allow(newBalance, msg.sender);
+
+        // Advance the accrual window by full months claimed
+        lastIncomeBlock[msg.sender] = lastBlock + monthsElapsed * BLOCKS_PER_MONTH;
+
         return true;
     }
 
@@ -347,6 +401,23 @@ contract CompliantERC20 is ZamaEthereumConfig {
      */
     function hasClaimedMint(address account) external view returns (ebool) {
         return claimedMints[account];
+    }
+
+    /**
+     * @notice Get currently claimable monthly income for an account
+     * @param account Address to query
+     * @return Plaintext amount of income claimable right now
+     */
+    function claimableMonthlyIncome(address account) external view returns (uint256) {
+        uint64 lastBlock = lastIncomeBlock[account];
+        if (lastBlock == 0 || block.number < lastBlock) return 0;
+
+        uint256 blocksElapsed = block.number - lastBlock;
+        uint256 monthsElapsed = blocksElapsed / BLOCKS_PER_MONTH;
+
+        if (monthsElapsed == 0) return 0;
+
+        return monthsElapsed * MONTHLY_INCOME;
     }
 
     // ============ Internal Functions ============

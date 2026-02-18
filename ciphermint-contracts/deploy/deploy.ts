@@ -30,15 +30,15 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const complianceAddress = complianceRules.address;
   console.log(`✅ ComplianceRules deployed at: ${complianceAddress}\n`);
 
-  // 3. Deploy CompliantERC20
-  console.log("📋 Deploying CompliantERC20...");
+  // 3. Deploy CompliantERC20 (SetvensBA UBI token)
+  console.log("📋 Deploying SetvensBA UBI token...");
   const token = await deploy("CompliantERC20", {
     from: deployer,
-    args: ["Compliant Token", "CPL", complianceAddress],
+    args: ["SetvensBA UBI", "SBA", complianceAddress],
     log: true,
   });
   const tokenAddress = token.address;
-  console.log(`✅ CompliantERC20 deployed at: ${tokenAddress}\n`);
+  console.log(`✅ SetvensBA UBI (SBA) deployed at: ${tokenAddress}\n`);
 
   // 4. Setup: Set authorized caller on ComplianceRules
   console.log("🔧 Setting up contract permissions...");
