@@ -228,6 +228,9 @@ describe("Full Integration Flow", function () {
       const decryptedBalance = await fhevm.userDecryptEuint(FhevmType.euint64, balance, tokenAddress, signers.alice);
 
       expect(decryptedBalance).to.equal(MINT_AMOUNT);
+
+      const tvs = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
+      expect(tvs).to.equal(MINT_AMOUNT);
     });
 
     it("should allow compliant user to claim tokens once", async function () {
@@ -249,6 +252,9 @@ describe("Full Integration Flow", function () {
       const claimedStatus = await token.connect(signers.alice).hasClaimedMint(signers.alice.address);
       const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.alice);
       expect(hasClaimed).to.be.true;
+
+      const tvs = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
+      expect(tvs).to.equal(decryptedAfter);
     });
 
     it("should not mint on second claim", async function () {
@@ -269,6 +275,9 @@ describe("Full Integration Flow", function () {
     });
 
     it("should not mint for non-compliant user", async function () {
+      // Snapshot TVS before Charlie's claim attempt
+      const tvsBefore = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
+
       await token.connect(signers.charlie).claimTokens();
 
       const balanceAfter = await token.connect(signers.charlie).balanceOf(signers.charlie.address);
@@ -284,6 +293,11 @@ describe("Full Integration Flow", function () {
       const claimedStatus = await token.connect(signers.charlie).hasClaimedMint(signers.charlie.address);
       const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.charlie);
       expect(hasClaimed).to.be.false;
+
+      // Total value shielded should have increased only by the intended claim amount
+      // (encrypted logic will turn this into a no-op for Charlie in balances)
+      const tvsAfter = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
+      expect(tvsAfter).to.equal(tvsBefore + CLAIM_AMOUNT);
     });
 
     it("should reject mint amounts above uint64 max", async function () {
@@ -432,6 +446,9 @@ describe("Full Integration Flow", function () {
       const blocksPerMonth = await token.BLOCKS_PER_MONTH();
       const monthlyIncome = await token.MONTHLY_INCOME();
 
+      // Snapshot TVS before accrual/claim
+      const tvsBefore = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
+
       // Mine one full "month" worth of blocks
       const blocksHex = "0x" + blocksPerMonth.toString(16);
       await ethers.provider.send("hardhat_mine", [blocksHex]);
@@ -458,6 +475,10 @@ describe("Full Integration Flow", function () {
       );
 
       expect(decryptedAfter).to.equal(decryptedBefore + monthlyIncome);
+
+      // TVS should increase by the intended monthly income amount
+      const tvsAfter = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
+      expect(tvsAfter).to.equal(tvsBefore + monthlyIncome);
 
       // After claiming, there should be no more income immediately available
       const claimableAfter = await token.claimableMonthlyIncome(signers.alice.address);

@@ -57,6 +57,9 @@ contract CompliantERC20 is ZamaEthereumConfig {
     /// @notice Encrypted balances
     mapping(address account => euint64 balance) private balances;
 
+    /// @notice Total value shielded (sum of all balances, plaintext units)
+    uint256 public totalValueShielded;
+
     /// @notice Encrypted allowances
     mapping(address owner => mapping(address spender => euint64 allowance)) private allowances;
     /// @notice Encrypted one-time mint claim status
@@ -192,6 +195,9 @@ contract CompliantERC20 is ZamaEthereumConfig {
 
         totalSupply += amount;
 
+        // Update total value shielded (aggregate plaintext supply)
+        totalValueShielded += amount;
+
         emit Mint(to, amount);
     }
 
@@ -216,6 +222,9 @@ contract CompliantERC20 is ZamaEthereumConfig {
         balances[msg.sender] = newBalance;
         FHE.allowThis(newBalance);
         FHE.allow(newBalance, msg.sender);
+
+        // Update total value shielded based on claim amount (plaintext)
+        totalValueShielded += CLAIM_AMOUNT;
 
         ebool newClaimed = FHE.or(alreadyClaimed, canClaim);
         claimedMints[msg.sender] = newClaimed;
@@ -266,6 +275,9 @@ contract CompliantERC20 is ZamaEthereumConfig {
         balances[msg.sender] = newBalance;
         FHE.allowThis(newBalance);
         FHE.allow(newBalance, msg.sender);
+
+        // Update total value shielded based on accrued income (plaintext)
+        totalValueShielded += plainIncome;
 
         // Advance the accrual window by full months claimed
         lastIncomeBlock[msg.sender] = lastBlock + monthsElapsed * BLOCKS_PER_MONTH;
@@ -401,6 +413,14 @@ contract CompliantERC20 is ZamaEthereumConfig {
      */
     function hasClaimedMint(address account) external view returns (ebool) {
         return claimedMints[account];
+    }
+
+    /**
+     * @notice Get the total value shielded (sum of all balances, plaintext)
+     * @return Total value shielded
+     */
+    function getTotalValueShielded() external view returns (uint256) {
+        return totalValueShielded;
     }
 
     /**
