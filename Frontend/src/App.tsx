@@ -10,6 +10,7 @@ import {
   AboutPage,
   ActionPanel,
   BalanceCard,
+  Landing,
   StatusCard,
   StepperPanel,
 } from "./components";
@@ -45,6 +46,10 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [activePage, setActivePage] = useState<"app" | "about">("app");
   const [kycPollingEnabled, setKycPollingEnabled] = useState(false);
+  const [hasSeenLanding, setHasSeenLanding] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("ciphermint-landing-seen") === "true";
+  });
 
   const identityReady = Boolean(IDENTITY_REGISTRY_ADDRESS);
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
@@ -139,6 +144,13 @@ export default function App() {
     setBalance,
   });
 
+  function handleCompleteLanding() {
+    setHasSeenLanding(true);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("ciphermint-landing-seen", "true");
+    }
+  }
+
   async function handleCopyAddress() {
     if (!address) return;
     try {
@@ -148,6 +160,14 @@ export default function App() {
     } catch (err) {
       setError("Failed to copy address.");
     }
+  }
+
+  if (!hasSeenLanding) {
+    return (
+      <div className="app">
+        <Landing onContinue={handleCompleteLanding} />
+      </div>
+    );
   }
 
   return (

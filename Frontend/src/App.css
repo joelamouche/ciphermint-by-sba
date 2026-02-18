@@ -374,6 +374,99 @@ input {
   font-size: 0.9rem;
 }
 
+.landing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 160px);
+  text-align: center;
+}
+
+.landing-card {
+  max-width: 820px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  padding: 56px 24px 48px;
+  align-items: center;
+}
+
+.landing-title {
+  font-size: clamp(3.2rem, 4.2vw + 1.4rem, 4.6rem);
+  line-height: 1.12;
+}
+
+.landing-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.landing-tagline {
+  margin: 0;
+  color: #e4e4e7;
+  font-size: 1.35rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.landing-tagline-secondary {
+  color: #d4d4d8;
+  font-size: 1.25rem;
+}
+
+.landing-tagline-separator {
+  opacity: 0.6;
+}
+
+.landing-subtitle {
+  margin: 12px 0 0;
+  color: #a1a1aa;
+  font-size: 1rem;
+}
+
+.landing-logos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+}
+
+.landing-logo-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #a1a1aa;
+  font-size: 0.9rem;
+}
+
+.landing-logo-image {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
+}
+
+.landing-logo-text {
+  white-space: nowrap;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  justify-content: center;
+}
+
+.landing-actions button {
+  padding: 14px 32px;
+  font-size: 1rem;
+  border-radius: 999px;
+}
+
 @media (max-width: 960px) {
   .layout {
     grid-template-columns: 1fr;

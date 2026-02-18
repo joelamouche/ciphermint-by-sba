@@ -4,35 +4,54 @@ export default function AboutPage() {
       <section className="card">
         <h2>What is CipherMint?</h2>
         <p>
-          CipherMint is a confidential RWA proof of concept built on Zama FHEVM.
-          It demonstrates a compliant ERC-20 where verified humans (age 18+ with
-          a unique name) can mint 100 tokens, and transfers are confidential and
-          restricted to verified holders.
+          CipherMint is a KYC-gated UBI experiment for unique names, built on
+          Zama&apos;s FHEVM. Each verified human with a unique full name can
+          claim an initial allocation of test tokens and then receive ongoing
+          monthly income. This UBI token is the base currency for all SBA DeFi
+          and RWA demos.
         </p>
       </section>
 
       <section className="card">
         <h2>Key principles</h2>
         <ul className="about-list">
-          <li>No PII stored in the backend.</li>
+          <li>No raw PII is stored in the backend or on-chain.</li>
           <li>
-            Backend writes a user&apos;s name string to IdentityRegistry, tied
-            to their wallet.
+            A verified user&apos;s unique full name is linked to their wallet in
+            the IdentityRegistry using encrypted attributes.
           </li>
-          <li>Name uniqueness is enforced on-chain by the contracts.</li>
-          <li>Minting is allowed once per verified address.</li>
-          <li>Transfers only succeed between verified addresses.</li>
+          <li>Full-name uniqueness is enforced on-chain by the contracts.</li>
+          <li>
+            UBI is only available to KYC&apos;d humans passing age and uniqueness
+            checks.
+          </li>
+          <li>
+            The token acts as shared test liquidity for SBA&apos;s DeFi and RWA
+            demos.
+          </li>
         </ul>
       </section>
 
       <section className="card">
         <h2>How it works</h2>
         <ol className="about-list">
-          <li>Connect wallet and check on-chain identity status.</li>
-          <li>If not verified, start the Didit KYC flow.</li>
-          <li>Backend writes the verified name to IdentityRegistry.</li>
-          <li>Verified users can claim 100 tokens once.</li>
-          <li>Transfers are confidential and compliance-checked.</li>
+          <li>Connect your wallet and check your on-chain identity status.</li>
+          <li>
+            If not verified, complete the off-chain KYC flow to prove age and
+            uniqueness.
+          </li>
+          <li>
+            The backend uses Zama FHEVM to register your encrypted identity
+            attributes and unique name.
+          </li>
+          <li>
+            Once verified, you can claim an initial drop of UBI tokens and then
+            accrue monthly income tied to your unique name.
+          </li>
+          <li>
+            Transfers remain confidential and are restricted to verified
+            addresses only.
+          </li>
         </ol>
       </section>
 
@@ -41,19 +60,27 @@ export default function AboutPage() {
         <div className="about-architecture">
           <div>
             <strong>Frontend</strong>
-            <span>Wallet login + KYC flow + encrypted reads</span>
+            <span>
+              Wallet login, landing &amp; dashboard, UBI claim UI, encrypted
+              balance reads
+            </span>
           </div>
           <div>
             <strong>Backend</strong>
-            <span>Didit webhook, name uniqueness, registry writes</span>
+            <span>
+              KYC provider webhooks, name uniqueness checks, registry writes
+            </span>
           </div>
           <div>
             <strong>Zama FHEVM</strong>
-            <span>IdentityRegistry + CompliantERC20</span>
+            <span>
+              IdentityRegistry + CompliantERC20 enforcing KYC-gated UBI and
+              confidential transfers
+            </span>
           </div>
           <div>
-            <strong>Didit</strong>
-            <span>Hosted KYC verification</span>
+            <strong>KYC Provider</strong>
+            <span>Hosted KYC verification for age and uniqueness</span>
           </div>
         </div>
       </section>
@@ -61,9 +88,11 @@ export default function AboutPage() {
       <section className="card">
         <h2>Privacy and compliance</h2>
         <p>
-          CipherMint stores no documents or PII. The chain only holds encrypted
-          attributes and hashed names. Compliance checks happen on-chain without
-          revealing sensitive data.
+          CipherMint stores no documents or raw PII. The chain only holds
+          encrypted attributes and hashed identifiers. Using Zama FHEVM, UBI
+          eligibility, name uniqueness, and transfer compliance can be enforced
+          on-chain without revealing sensitive data, allowing SBA&apos;s DeFi
+          demos to stay both confidential and compliant.
         </p>
       </section>
     </div>
