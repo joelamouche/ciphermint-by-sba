@@ -216,9 +216,10 @@ describe("Full Integration Flow", function () {
 
   describe("Token Operations", function () {
     // Note: euint64 max is ~18.4 quintillion. Using smaller values for tests.
-    const MINT_AMOUNT = 1000000000n; // 1 billion (fits easily in uint64)
-    const TRANSFER_AMOUNT = 100000000n; // 100 million
-    const CLAIM_AMOUNT = 100n;
+    const DECIMALS = 10n ** 8n; // 8 decimal places
+    const MINT_AMOUNT = 10n * DECIMALS; // 10 SBA in base units
+    const TRANSFER_AMOUNT = 1n * DECIMALS; // 1 SBA in base units
+    const CLAIM_AMOUNT = 100n * DECIMALS; // 100 SBA in base units
     const UINT64_MAX = (1n << 64n) - 1n;
 
     it("should mint tokens to Alice", async function () {
@@ -417,10 +418,7 @@ describe("Full Integration Flow", function () {
     });
 
     it("should have zero monthly income immediately after claim", async function () {
-      // Alice already called claimTokens in a previous test
-      const claimable = await token.claimableMonthlyIncome(signers.alice.address);
-      expect(claimable).to.equal(0n);
-
+      // Alice already called claimTokens in a previous test and has accrued some income
       const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
       const decryptedBefore = await fhevm.userDecryptEuint(
         FhevmType.euint64,
@@ -439,30 +437,35 @@ describe("Full Integration Flow", function () {
         signers.alice,
       );
 
-      expect(decryptedAfter).to.equal(decryptedBefore);
+      // Balance should not decrease after claiming
+      expect(decryptedAfter).to.be.gte(decryptedBefore);
+
+      // Immediately after claiming, no more income should be available
+      const claimableAfter = await token.claimableMonthlyIncome(signers.alice.address);
+      expect(claimableAfter).to.equal(0n);
     });
 
-    it("should accrue and allow claiming monthly income after enough blocks", async function () {
-      const blocksPerMonth = await token.BLOCKS_PER_MONTH();
-      const monthlyIncome = await token.MONTHLY_INCOME();
+    it("should accrue and allow claiming income after a few blocks", async function () {
+      // Reset accrual window for this test
+      await token.connect(signers.alice).claimMonthlyIncome();
 
-      // Snapshot TVS before accrual/claim
+      // Snapshot TVS and balance before accrual/claim
       const tvsBefore = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
+      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedBefore = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceBefore,
+        tokenAddress,
+        signers.alice,
+      );
 
-      // Mine one full "month" worth of blocks
-      const blocksHex = "0x" + blocksPerMonth.toString(16);
+      // Mine a small number of blocks to produce fractional-month income
+      const blocksToMine = 10n;
+      const blocksHex = "0x" + blocksToMine.toString(16);
       await ethers.provider.send("hardhat_mine", [blocksHex]);
 
       const claimable = await token.claimableMonthlyIncome(signers.alice.address);
-      expect(claimable).to.equal(monthlyIncome);
-
-      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedBefore = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceBefore,
-        tokenAddress,
-        signers.alice,
-      );
+      expect(claimable).to.be.gt(0n);
 
       await token.connect(signers.alice).claimMonthlyIncome();
 
@@ -474,11 +477,12 @@ describe("Full Integration Flow", function () {
         signers.alice,
       );
 
-      expect(decryptedAfter).to.equal(decryptedBefore + monthlyIncome);
+      const income = decryptedAfter - decryptedBefore;
+      expect(income).to.be.gt(0n);
 
-      // TVS should increase by the intended monthly income amount
+      // TVS should increase by exactly the accrued income observed in balances
       const tvsAfter = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
-      expect(tvsAfter).to.equal(tvsBefore + monthlyIncome);
+      expect(tvsAfter).to.equal(tvsBefore + income);
 
       // After claiming, there should be no more income immediately available
       const claimableAfter = await token.claimableMonthlyIncome(signers.alice.address);

@@ -29,8 +29,19 @@ import {
   useTransferTokens,
 } from "./hooks";
 import "./App.css";
+import {
+  loadCachedBigint,
+  loadCachedBoolean,
+  saveCachedBigint,
+  saveCachedBoolean,
+} from "./lib/stateCache";
 
-export type Status = "idle" | "loading" | "success" | "error";
+export type Status =
+  | "idle"
+  | "loading"
+  | "confirming"
+  | "success"
+  | "error";
 
 function formatAddress(value?: string) {
   if (!value) return "Disconnected";
@@ -64,9 +75,35 @@ export default function App() {
     useTotalValueShielded();
 
   useEffect(() => {
-    setClaimed(null);
-    setBalance(null);
+    if (!address || !COMPLIANT_ERC20_ADDRESS) {
+      setClaimed(null);
+      setBalance(null);
+      return;
+    }
+
+    const claimedKey = `ciphermint-claimed-${address}`;
+    const balanceKey = `ciphermint-balance-${address}`;
+
+    const cachedClaimed = loadCachedBoolean(claimedKey);
+    const cachedBalance = loadCachedBigint(balanceKey);
+
+    setClaimed(cachedClaimed);
+    setBalance(cachedBalance);
   }, [address, COMPLIANT_ERC20_ADDRESS]);
+
+  const setClaimedWithCache = (value: boolean | null) => {
+    setClaimed(value);
+    if (address && value !== null) {
+      saveCachedBoolean(`ciphermint-claimed-${address}`, value);
+    }
+  };
+
+  const setBalanceWithCache = (value: bigint | null) => {
+    setBalance(value);
+    if (address && value !== null) {
+      saveCachedBigint(`ciphermint-balance-${address}`, value);
+    }
+  };
 
   const canClaim = useMemo(() => {
     return Boolean(isAttested) && claimed !== true;
@@ -120,7 +157,11 @@ export default function App() {
     setKycPollingEnabled(true);
   }
 
-  const { handleClaim, status: claimStatus } = useClaimTokens({
+  const {
+    handleClaim,
+    status: claimStatus,
+    confirmationsRemaining: claimConfirmationsRemaining,
+  } = useClaimTokens({
     tokenAddress: COMPLIANT_ERC20_ADDRESS,
     setError,
     abi: compliantErc20Abi,
@@ -129,7 +170,11 @@ export default function App() {
     },
   });
 
-  const { handleTransfer, status: transferStatus } = useTransferTokens({
+  const {
+    handleTransfer,
+    status: transferStatus,
+    confirmationsRemaining: transferConfirmationsRemaining,
+  } = useTransferTokens({
     tokenAddress: COMPLIANT_ERC20_ADDRESS,
     userAddress: address,
     transferTo,
@@ -145,34 +190,34 @@ export default function App() {
   const { handleRefreshMint, status: mintStatus } = useRefreshMint({
     userAddress: address,
     setError,
-    setClaimed,
+    setClaimed: setClaimedWithCache,
   });
 
   const { handleRefreshBalance, status: balanceStatus } = useRefreshBalance({
     userAddress: address,
     setError,
-    setBalance,
+    setBalance: setBalanceWithCache,
   });
+
+  const { claimableIncome, refetchClaimableIncome, claimableIncomeStatus } =
+    useClaimableMonthlyIncome({
+      userAddress: address,
+    });
 
   const {
-    claimableIncome,
-    refetchClaimableIncome,
-    claimableIncomeStatus,
-  } = useClaimableMonthlyIncome({
-    userAddress: address,
+    handleClaimMonthlyIncome,
+    status: claimMonthlyStatus,
+    confirmationsRemaining: incomeConfirmationsRemaining,
+  } = useClaimMonthlyIncome({
+    tokenAddress: COMPLIANT_ERC20_ADDRESS,
+    setError,
+    abi: compliantErc20Abi,
+    onSuccess: () => {
+      refetchTotalValueShielded();
+      refetchClaimableIncome();
+      handleRefreshBalance();
+    },
   });
-
-  const { handleClaimMonthlyIncome, status: claimMonthlyStatus } =
-    useClaimMonthlyIncome({
-      tokenAddress: COMPLIANT_ERC20_ADDRESS,
-      setError,
-      abi: compliantErc20Abi,
-      onSuccess: () => {
-        refetchTotalValueShielded();
-        refetchClaimableIncome();
-        handleRefreshBalance();
-      },
-    });
 
   function handleCompleteLanding() {
     setHasSeenLanding(true);
@@ -229,7 +274,7 @@ export default function App() {
               </a>
             </h1>
             <div className="brand-subtitle">
-              <span className="brand-subtitle-text">using Zama</span>
+              <span className="brand-subtitle-text">UBI using Zama</span>
               <img
                 className="brand-subtitle-logo"
                 src="/zama-logo.png"
@@ -275,6 +320,10 @@ export default function App() {
               transferTo={transferTo}
               transferAmount={transferAmount}
               transferStatus={transferStatus}
+              claimConfirmationsRemaining={claimConfirmationsRemaining}
+              transferConfirmationsRemaining={
+                transferConfirmationsRemaining
+              }
               onStartKyc={handleStartKyc}
               onOpenKyc={handleOpenKyc}
               onClaim={handleClaim}
@@ -309,6 +358,7 @@ export default function App() {
               claimableIncome={claimableIncome}
               claimableIncomeStatus={claimableIncomeStatus}
               claimMonthlyStatus={claimMonthlyStatus}
+              claimMonthlyConfirmationsRemaining={incomeConfirmationsRemaining}
               onRefreshIncome={refetchClaimableIncome}
               onClaimIncome={handleClaimMonthlyIncome}
             />

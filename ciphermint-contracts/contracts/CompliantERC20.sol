@@ -40,16 +40,16 @@ contract CompliantERC20 is ZamaEthereumConfig {
     /// @notice Token symbol
     string public symbol;
 
-    /// @notice Token decimals
-    uint8 public constant DECIMALS = 18;
+    /// @notice Token decimals (used for display / UI)
+    uint8 public constant DECIMALS = 8;
 
     /// @notice Total supply (public for transparency)
     uint256 public totalSupply;
-    /// @notice One-time claim amount (plaintext units)
-    uint64 public constant CLAIM_AMOUNT = 100;
-    /// @notice Monthly income amount (plaintext units)
-    uint64 public constant MONTHLY_INCOME = 10;
-    /// @notice Approximate number of blocks per month (for income accrual)
+    /// @notice One-time claim amount in base units (100 SBA with 8 decimals)
+    uint64 public constant CLAIM_AMOUNT = 100 * 1e8;
+    /// @notice Target income per "month" in base units (10 SBA with 8 decimals)
+    uint64 public constant MONTHLY_INCOME = 10 * 1e8;
+    /// @notice Approximate number of blocks per month (used for per-block accrual)
     uint64 public constant BLOCKS_PER_MONTH = 216_000;
 
     // ============ Token State ============
@@ -240,8 +240,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
     }
 
     /**
-     * @notice Claim accrued monthly income if compliant
-     * @dev Uses approximate block-based months; failure to meet compliance mints 0.
+     * @notice Claim accrued income if compliant
+     * @dev Uses per-block linear accrual based on BLOCKS_PER_MONTH; failure to meet compliance mints 0.
      * @return success Always true
      */
     function claimMonthlyIncome() external returns (bool success) {
@@ -258,13 +258,15 @@ contract CompliantERC20 is ZamaEthereumConfig {
         }
 
         uint256 blocksElapsed = block.number - lastBlock;
-        uint64 monthsElapsed = uint64(blocksElapsed / BLOCKS_PER_MONTH);
-
-        if (monthsElapsed == 0) {
+        if (blocksElapsed == 0) {
             return true;
         }
 
-        uint64 plainIncome = MONTHLY_INCOME * monthsElapsed;
+        // Per-block linear accrual with same approximate monthly/annual rate
+        uint64 plainIncome = uint64((uint256(MONTHLY_INCOME) * blocksElapsed) / BLOCKS_PER_MONTH);
+        if (plainIncome == 0) {
+            return true;
+        }
 
         ebool isCompliant = complianceChecker.checkCompliance(msg.sender);
 
@@ -279,8 +281,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
         // Update total value shielded based on accrued income (plaintext)
         totalValueShielded += plainIncome;
 
-        // Advance the accrual window by full months claimed
-        lastIncomeBlock[msg.sender] = lastBlock + monthsElapsed * BLOCKS_PER_MONTH;
+        // Reset accrual window to current block to avoid residual fractional income
+        lastIncomeBlock[msg.sender] = uint64(block.number);
 
         return true;
     }
@@ -424,7 +426,7 @@ contract CompliantERC20 is ZamaEthereumConfig {
     }
 
     /**
-     * @notice Get currently claimable monthly income for an account
+     * @notice Get currently claimable income for an account (per-block accrual)
      * @param account Address to query
      * @return Plaintext amount of income claimable right now
      */
@@ -433,11 +435,10 @@ contract CompliantERC20 is ZamaEthereumConfig {
         if (lastBlock == 0 || block.number < lastBlock) return 0;
 
         uint256 blocksElapsed = block.number - lastBlock;
-        uint256 monthsElapsed = blocksElapsed / BLOCKS_PER_MONTH;
+        if (blocksElapsed == 0) return 0;
 
-        if (monthsElapsed == 0) return 0;
-
-        return monthsElapsed * MONTHLY_INCOME;
+        uint256 income = (uint256(MONTHLY_INCOME) * blocksElapsed) / BLOCKS_PER_MONTH;
+        return income;
     }
 
     // ============ Internal Functions ============

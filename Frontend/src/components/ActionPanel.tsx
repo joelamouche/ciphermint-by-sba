@@ -15,6 +15,8 @@ interface ActionPanelProps {
   transferTo: string;
   transferAmount: string;
   transferStatus: Status;
+  claimConfirmationsRemaining: number | null;
+  transferConfirmationsRemaining: number | null;
   onStartKyc: () => void;
   onOpenKyc: () => void;
   onClaim: () => void;
@@ -35,6 +37,8 @@ export function ActionPanel({
   transferTo,
   transferAmount,
   transferStatus,
+  claimConfirmationsRemaining,
+  transferConfirmationsRemaining,
   onStartKyc,
   onOpenKyc,
   onClaim,
@@ -104,21 +108,33 @@ export function ActionPanel({
           </p>
           <button
             type="button"
+            className={claimStatus === "confirming" ? "status-warn" : undefined}
             onClick={onClaim}
             disabled={
               !canClaim ||
               claimStatus === "loading" ||
+              claimStatus === "confirming" ||
               claimStatus === "success"
             }
           >
             {claimStatus === "loading"
-              ? "Claiming..."
+              ? "Submitting claim..."
+              : claimStatus === "confirming"
+                ? "Waiting..."
               : claimStatus === "success"
-                ? "Claimed (refresh status to see updated balance)"
+                ? "Claimed"
                 : claimStatus === "error"
                   ? "Retry claim"
                   : "Claim 100 tokens"}
           </button>
+          {claimStatus === "confirming" &&
+            claimConfirmationsRemaining != null && (
+              <p className="status-warn status-center">
+                {claimConfirmationsRemaining} block
+                {claimConfirmationsRemaining === 1 ? "" : "s"} confirmations
+                remaining
+              </p>
+            )}
         </>
       )}
 
@@ -143,11 +159,11 @@ export function ActionPanel({
             </p>
           )}
           <label className="field">
-            <span>Amount (plaintext units)</span>
+            <span>Amount (SBA, up to 8 decimals)</span>
             <input
               value={transferAmount}
               onChange={(event) => onTransferAmountChange(event.target.value)}
-              placeholder="100"
+              placeholder="1.00000000"
             />
           </label>
           {transferStatus === "success" && (
@@ -155,22 +171,36 @@ export function ActionPanel({
           )}
           <button
             type="button"
+            className={
+              transferStatus === "confirming" ? "status-warn" : undefined
+            }
             onClick={onTransfer}
             disabled={
               !transferTo ||
               !transferAmount ||
               transferStatus === "loading" ||
+              transferStatus === "confirming" ||
               isSelfTransfer
             }
           >
             {transferStatus === "loading"
-              ? "Sending..."
+              ? "Submitting transfer..."
+              : transferStatus === "confirming"
+                ? "Waiting..."
               : transferStatus === "success"
                 ? "Send another transfer"
                 : transferStatus === "error"
                   ? "Retry transfer"
                   : "Send transfer"}
           </button>
+          {transferStatus === "confirming" &&
+            transferConfirmationsRemaining != null && (
+              <p className="muted status-center">
+                {transferConfirmationsRemaining} block
+                {transferConfirmationsRemaining === 1 ? "" : "s"} confirmations
+                remaining
+              </p>
+            )}
         </>
       )}
     </section>

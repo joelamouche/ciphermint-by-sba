@@ -1,4 +1,5 @@
 import type { Status } from "../App";
+import { formatTokenAmount } from "../lib/tokenFormat";
 
 interface TvsCardProps {
   totalValueShielded?: bigint;
@@ -27,11 +28,11 @@ export function TvsCard({
         </button>
       </div>
       <p className="muted">
-        Aggregate plaintext supply across all encrypted balances (UBI + income).
+        Aggregate supply across all encrypted balances (UBI + income), shown in SBA (8 decimals).
       </p>
       <strong>
         {typeof totalValueShielded === "bigint"
-          ? `${totalValueShielded.toString()} SBA`
+          ? `${formatTokenAmount(totalValueShielded)} SBA`
           : "Encrypted / unavailable"}
       </strong>
     </section>
