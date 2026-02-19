@@ -31,4 +31,25 @@ export const compliantErc20Abi = [
     ],
     outputs: [{ name: "success", type: "bool" }],
   },
+  {
+    type: "function",
+    name: "claimMonthlyIncome",
+    stateMutability: "nonpayable",
+    inputs: [],
+    outputs: [{ name: "success", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "claimableMonthlyIncome",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getTotalValueShielded",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;

@@ -80,8 +80,8 @@ export function ActionPanel({
               {kycSessionStatus === "in_progress"
                 ? "Verification in progress"
                 : kycSessionStatus === "done"
-                ? "Verification complete"
-                : "Open Didit verification"}
+                  ? "Verification complete"
+                  : "Open Didit verification"}
             </button>
           ) : (
             <button
@@ -114,10 +114,10 @@ export function ActionPanel({
             {claimStatus === "loading"
               ? "Claiming..."
               : claimStatus === "success"
-              ? "Claimed"
-              : claimStatus === "error"
-              ? "Retry claim"
-              : "Claim 100 tokens"}
+                ? "Claimed (refresh status to see updated balance)"
+                : claimStatus === "error"
+                  ? "Retry claim"
+                  : "Claim 100 tokens"}
           </button>
         </>
       )}
@@ -166,10 +166,10 @@ export function ActionPanel({
             {transferStatus === "loading"
               ? "Sending..."
               : transferStatus === "success"
-              ? "Send another transfer"
-              : transferStatus === "error"
-              ? "Retry transfer"
-              : "Send transfer"}
+                ? "Send another transfer"
+                : transferStatus === "error"
+                  ? "Retry transfer"
+                  : "Send transfer"}
           </button>
         </>
       )}

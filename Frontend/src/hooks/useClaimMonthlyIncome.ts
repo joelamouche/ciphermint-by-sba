@@ -3,19 +3,19 @@ import { useMutation } from "@tanstack/react-query";
 import { useWriteContract } from "wagmi";
 import type { Status } from "../App";
 
-interface UseClaimTokensParams {
+interface UseClaimMonthlyIncomeParams {
   tokenAddress?: `0x${string}`;
   setError: (message: string | null) => void;
   abi: unknown;
   onSuccess?: () => void;
 }
 
-export function useClaimTokens({
+export function useClaimMonthlyIncome({
   tokenAddress,
   setError,
   abi,
   onSuccess,
-}: UseClaimTokensParams) {
+}: UseClaimMonthlyIncomeParams) {
   const { writeContractAsync } = useWriteContract();
   const mutation = useMutation({
     mutationFn: async () => {
@@ -25,12 +25,14 @@ export function useClaimTokens({
       await writeContractAsync({
         address: tokenAddress,
         abi: abi as any,
-        functionName: "claimTokens",
+        functionName: "claimMonthlyIncome",
         args: [],
       });
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Claim failed.");
+      setError(
+        err instanceof Error ? err.message : "Monthly income claim failed.",
+      );
     },
     onSuccess: () => {
       onSuccess?.();
@@ -50,7 +52,7 @@ export function useClaimTokens({
       ? "error"
       : "idle";
 
-  const handleClaim = async () => {
+  const handleClaimMonthlyIncome = async () => {
     setError(null);
     try {
       await mutation.mutateAsync();
@@ -59,5 +61,6 @@ export function useClaimTokens({
     }
   };
 
-  return { handleClaim, status };
+  return { handleClaimMonthlyIncome, status };
 }
+

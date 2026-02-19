@@ -12,13 +12,17 @@ import {
   BalanceCard,
   Landing,
   StatusCard,
+  TvsCard,
   StepperPanel,
 } from "./components";
 import { steps } from "./constants/steps";
 import {
   useClaimTokens,
+  useClaimMonthlyIncome,
   useGetKycSession,
   useIdentityStatus,
+  useClaimableMonthlyIncome,
+  useTotalValueShielded,
   useStartKycSession,
   useRefreshBalance,
   useRefreshMint,
@@ -55,6 +59,9 @@ export default function App() {
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
 
   const { isAttested, refetchAttested } = useIdentityStatus({ address });
+
+  const { totalValueShielded, refetchTotalValueShielded, tvsStatus } =
+    useTotalValueShielded();
 
   useEffect(() => {
     setClaimed(null);
@@ -117,6 +124,9 @@ export default function App() {
     tokenAddress: COMPLIANT_ERC20_ADDRESS,
     setError,
     abi: compliantErc20Abi,
+    onSuccess: () => {
+      refetchTotalValueShielded();
+    },
   });
 
   const { handleTransfer, status: transferStatus } = useTransferTokens({
@@ -143,6 +153,26 @@ export default function App() {
     setError,
     setBalance,
   });
+
+  const {
+    claimableIncome,
+    refetchClaimableIncome,
+    claimableIncomeStatus,
+  } = useClaimableMonthlyIncome({
+    userAddress: address,
+  });
+
+  const { handleClaimMonthlyIncome, status: claimMonthlyStatus } =
+    useClaimMonthlyIncome({
+      tokenAddress: COMPLIANT_ERC20_ADDRESS,
+      setError,
+      abi: compliantErc20Abi,
+      onSuccess: () => {
+        refetchTotalValueShielded();
+        refetchClaimableIncome();
+        handleRefreshBalance();
+      },
+    });
 
   function handleCompleteLanding() {
     setHasSeenLanding(true);
@@ -276,6 +306,17 @@ export default function App() {
               isBalanceEncrypted={isBalanceEncrypted}
               balanceStatus={balanceStatus}
               onRefreshBalance={handleRefreshBalance}
+              claimableIncome={claimableIncome}
+              claimableIncomeStatus={claimableIncomeStatus}
+              claimMonthlyStatus={claimMonthlyStatus}
+              onRefreshIncome={refetchClaimableIncome}
+              onClaimIncome={handleClaimMonthlyIncome}
+            />
+
+            <TvsCard
+              totalValueShielded={totalValueShielded}
+              tvsStatus={tvsStatus as any}
+              onRefreshTvs={refetchTotalValueShielded}
             />
           </aside>
         </div>
