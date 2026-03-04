@@ -316,6 +316,7 @@ input {
 .muted {
   color: #a1a1aa;
   font-size: 0.9rem;
+  margin: 0 0 4px;
 }
 
 .warning {

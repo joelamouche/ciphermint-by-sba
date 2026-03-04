@@ -6,9 +6,10 @@ export default function AboutPage() {
         <p>
           CipherMint is a KYC-gated UBI experiment for unique names, built on
           Zama&apos;s FHEVM. Each verified human with a unique full name can
-          claim an initial allocation of test tokens and then receive ongoing
-          monthly income. This UBI token is the base currency for all SBA DeFi
-          and RWA demos.
+          claim an initial allocation of <strong>100 SBA</strong> and then
+          accrue income over time targeting roughly <strong>10 SBA</strong> per
+          month. This UBI token is the base currency for all SBA DeFi and RWA
+          demos.
         </p>
       </section>
 
@@ -45,8 +46,10 @@ export default function AboutPage() {
             attributes and unique name.
           </li>
           <li>
-            Once verified, you can claim an initial drop of UBI tokens and then
-            accrue monthly income tied to your unique name.
+            Once verified, you can claim a one-time drop of <strong>100 SBA</strong>.
+            After that, your address continuously accrues encrypted income at a
+            rate calibrated to about <strong>10 SBA per month</strong>, which
+            you can periodically claim as &quot;accrued income&quot;.
           </li>
           <li>
             Transfers remain confidential and are restricted to verified

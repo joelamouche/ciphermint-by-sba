@@ -9,7 +9,6 @@ interface BalanceCardProps {
   claimableIncome?: bigint;
   claimableIncomeStatus: Status;
   claimMonthlyStatus: Status;
-  claimMonthlyConfirmationsRemaining: number | null;
   onRefreshIncome: () => void;
   onClaimIncome: () => void;
 }
@@ -22,7 +21,6 @@ export function BalanceCard({
   claimableIncome,
   claimableIncomeStatus,
   claimMonthlyStatus,
-  claimMonthlyConfirmationsRemaining,
   onRefreshIncome,
   onClaimIncome,
 }: BalanceCardProps) {
@@ -35,7 +33,7 @@ export function BalanceCard({
         Decryption requires a signature. Values are shown in SBA (8 decimals).
       </p>
       <div className="status-grid">
-        <div>
+        <div style={{ marginTop: "1rem" }}>
           <div className="status-row">
             <span>Encrypted balance</span>
             <button
@@ -52,12 +50,14 @@ export function BalanceCard({
             </button>
           </div>
           <strong className={isBalanceEncrypted ? "status-warn" : ""}>
-            {isBalanceEncrypted ? "Encrypted" : formatTokenAmount(balance)}
+            {isBalanceEncrypted
+              ? "Encrypted"
+              : `${formatTokenAmount(balance)} SBA`}
           </strong>
         </div>
-        <div style={{ marginTop: "0.5rem" }}>
+        <div>
           <div className="status-row">
-            <span>Accrued income</span>
+            <span>Claimable monthly income</span>
             <button
               type="button"
               className="ghost"
@@ -69,46 +69,31 @@ export function BalanceCard({
                 : "Refresh"}
             </button>
           </div>
-          <div className="status-row" style={{ marginTop: "0.75rem" }}>
-            <div>
-              <strong>
-                {formatTokenAmount(hasIncome ? claimableIncome : 0n)}
-              </strong>
-              {claimMonthlyStatus === "success" && (
-                <div className="status-good">Claimed</div>
-              )}
-              {!hasIncome && claimMonthlyStatus !== "success" && (
-                <div className="muted">No income yet</div>
-              )}
-              {claimMonthlyStatus === "confirming" &&
-                claimMonthlyConfirmationsRemaining != null && (
-                  <div className="status-warn">
-                    {claimMonthlyConfirmationsRemaining} block
-                    {claimMonthlyConfirmationsRemaining === 1 ? "" : "s"}{" "}
-                    confirmations remaining
-                  </div>
-                )}
-            </div>
-            <button
-              type="button"
-              className={`ghost ${
-                claimMonthlyStatus === "confirming" ? "ghost-warn" : ""
-              }`}
-              onClick={onClaimIncome}
-              disabled={
-                !hasIncome ||
-                claimMonthlyStatus === "loading" ||
-                claimMonthlyStatus === "confirming"
-              }
-            >
-              {claimMonthlyStatus === "loading"
-                ? "Submitting claim..."
-                : claimMonthlyStatus === "confirming"
-                  ? "Waiting..."
-                  : claimMonthlyStatus === "error"
-                    ? "Retry claim"
-                    : "Claim income"}
-            </button>
+          <div className="status-row">
+            <strong>
+              {formatTokenAmount(hasIncome ? claimableIncome : 0n)}
+            </strong>
+            {hasIncome ? (
+              <button
+                type="button"
+                className="ghost"
+                onClick={onClaimIncome}
+                disabled={
+                  claimMonthlyStatus === "loading" ||
+                  claimMonthlyStatus === "success"
+                }
+              >
+                {claimMonthlyStatus === "loading"
+                  ? "Claiming..."
+                  : claimMonthlyStatus === "success"
+                    ? "Claimed"
+                    : claimMonthlyStatus === "error"
+                      ? "Retry claim"
+                      : "Claim income"}
+              </button>
+            ) : (
+              <span className="muted">No income yet</span>
+            )}
           </div>
         </div>
       </div>

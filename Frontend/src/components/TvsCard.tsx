@@ -28,7 +28,17 @@ export function TvsCard({
         </button>
       </div>
       <p className="muted">
-        Aggregate supply across all encrypted balances (UBI + income), shown in SBA (8 decimals).
+        Sum of all encrypted balances held by UBI members, expressed in SBA (8 decimals).
+      </p>
+      <p className="muted">
+        <a
+          href="https://www.binance.com/en/square/post/35913205283209"
+          target="_blank"
+          rel="noreferrer"
+          className="brand-link"
+        >
+          Learn more about shielded value
+        </a>
       </p>
       <strong>
         {typeof totalValueShielded === "bigint"
