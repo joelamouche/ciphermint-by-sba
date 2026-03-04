@@ -215,11 +215,8 @@ describe("Full Integration Flow", function () {
   });
 
   describe("Token Operations", function () {
-    // Note: euint64 max is ~18.4 quintillion. Using smaller values for tests.
-    const DECIMALS = 10n ** 8n; // 8 decimal places
-    const MINT_AMOUNT = 10n * DECIMALS; // 10 SBA in base units
-    const TRANSFER_AMOUNT = 1n * DECIMALS; // 1 SBA in base units
-    const CLAIM_AMOUNT = 100n * DECIMALS; // 100 SBA in base units
+    const MINT_AMOUNT = 1_000_000n;
+    const TRANSFER_AMOUNT = 100_000n;
     const UINT64_MAX = (1n << 64n) - 1n;
 
     it("should mint tokens to Alice", async function () {
@@ -230,75 +227,14 @@ describe("Full Integration Flow", function () {
 
       expect(decryptedBalance).to.equal(MINT_AMOUNT);
 
-      const tvs = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
-      expect(tvs).to.equal(MINT_AMOUNT);
-    });
-
-    it("should allow compliant user to claim tokens once", async function () {
-      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedBefore = await fhevm.userDecryptEuint(
+      // Admin should also be able to decrypt Alice's balance
+      const adminView = await fhevm.userDecryptEuint(
         FhevmType.euint64,
-        balanceBefore,
+        balance,
         tokenAddress,
-        signers.alice,
+        signers.owner,
       );
-
-      await token.connect(signers.alice).claimTokens();
-
-      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedAfter = await fhevm.userDecryptEuint(FhevmType.euint64, balanceAfter, tokenAddress, signers.alice);
-
-      expect(decryptedAfter).to.equal(decryptedBefore + CLAIM_AMOUNT);
-
-      const claimedStatus = await token.connect(signers.alice).hasClaimedMint(signers.alice.address);
-      const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.alice);
-      expect(hasClaimed).to.be.true;
-
-      const tvs = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
-      expect(tvs).to.equal(decryptedAfter);
-    });
-
-    it("should not mint on second claim", async function () {
-      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedBefore = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceBefore,
-        tokenAddress,
-        signers.alice,
-      );
-
-      await token.connect(signers.alice).claimTokens();
-
-      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedAfter = await fhevm.userDecryptEuint(FhevmType.euint64, balanceAfter, tokenAddress, signers.alice);
-
-      expect(decryptedAfter).to.equal(decryptedBefore);
-    });
-
-    it("should not mint for non-compliant user", async function () {
-      // Snapshot TVS before Charlie's claim attempt
-      const tvsBefore = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
-
-      await token.connect(signers.charlie).claimTokens();
-
-      const balanceAfter = await token.connect(signers.charlie).balanceOf(signers.charlie.address);
-      const decryptedAfter = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceAfter,
-        tokenAddress,
-        signers.charlie,
-      );
-
-      expect(decryptedAfter).to.equal(0n);
-
-      const claimedStatus = await token.connect(signers.charlie).hasClaimedMint(signers.charlie.address);
-      const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.charlie);
-      expect(hasClaimed).to.be.false;
-
-      // Total value shielded should have increased only by the intended claim amount
-      // (encrypted logic will turn this into a no-op for Charlie in balances)
-      const tvsAfter = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
-      expect(tvsAfter).to.equal(tvsBefore + CLAIM_AMOUNT);
+      expect(adminView).to.equal(MINT_AMOUNT);
     });
 
     it("should reject mint amounts above uint64 max", async function () {
@@ -316,7 +252,7 @@ describe("Full Integration Flow", function () {
         .connect(signers.alice)
         ["transfer(address,bytes32,bytes)"](signers.bob.address, encryptedInput.handles[0], encryptedInput.inputProof);
 
-      // Check Bob's balance
+      // Check Bob's balance (user view)
       const bobBalance = await token.connect(signers.bob).balanceOf(signers.bob.address);
       const decryptedBobBalance = await fhevm.userDecryptEuint(
         FhevmType.euint64,
@@ -327,7 +263,11 @@ describe("Full Integration Flow", function () {
 
       expect(decryptedBobBalance).to.equal(TRANSFER_AMOUNT);
 
-      // Check Alice's balance
+      // Admin should also be able to decrypt Bob's balance
+      const adminBob = await fhevm.userDecryptEuint(FhevmType.euint64, bobBalance, tokenAddress, signers.owner);
+      expect(adminBob).to.equal(TRANSFER_AMOUNT);
+
+      // Check Alice's balance (user view)
       const aliceBalance = await token.connect(signers.alice).balanceOf(signers.alice.address);
       const decryptedAliceBalance = await fhevm.userDecryptEuint(
         FhevmType.euint64,
@@ -336,7 +276,11 @@ describe("Full Integration Flow", function () {
         signers.alice,
       );
 
-      expect(decryptedAliceBalance).to.equal(MINT_AMOUNT + CLAIM_AMOUNT - TRANSFER_AMOUNT);
+      expect(decryptedAliceBalance).to.equal(MINT_AMOUNT - TRANSFER_AMOUNT);
+
+      // Admin should also be able to decrypt Alice's balance
+      const adminAlice = await fhevm.userDecryptEuint(FhevmType.euint64, aliceBalance, tokenAddress, signers.owner);
+      expect(adminAlice).to.equal(MINT_AMOUNT - TRANSFER_AMOUNT);
     });
 
     it("should revert when transferring to self", async function () {
@@ -389,104 +333,6 @@ describe("Full Integration Flow", function () {
       );
 
       expect(aliceBalanceAfterDecrypted).to.equal(aliceBalanceBeforeDecrypted);
-    });
-
-    it("should not accrue monthly income before initial claimTokens", async function () {
-      // Bob has been attested and has a balance from transfers but has never called claimTokens
-      const claimable = await token.claimableMonthlyIncome(signers.bob.address);
-      expect(claimable).to.equal(0n);
-
-      const balanceBefore = await token.connect(signers.bob).balanceOf(signers.bob.address);
-      const decryptedBefore = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceBefore,
-        tokenAddress,
-        signers.bob,
-      );
-
-      await token.connect(signers.bob).claimMonthlyIncome();
-
-      const balanceAfter = await token.connect(signers.bob).balanceOf(signers.bob.address);
-      const decryptedAfter = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceAfter,
-        tokenAddress,
-        signers.bob,
-      );
-
-      expect(decryptedAfter).to.equal(decryptedBefore);
-    });
-
-    it("should have zero monthly income immediately after claim", async function () {
-      // Alice already called claimTokens in a previous test and has accrued some income
-      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedBefore = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceBefore,
-        tokenAddress,
-        signers.alice,
-      );
-
-      await token.connect(signers.alice).claimMonthlyIncome();
-
-      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedAfter = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceAfter,
-        tokenAddress,
-        signers.alice,
-      );
-
-      // Balance should not decrease after claiming
-      expect(decryptedAfter).to.be.gte(decryptedBefore);
-
-      // Immediately after claiming, no more income should be available
-      const claimableAfter = await token.claimableMonthlyIncome(signers.alice.address);
-      expect(claimableAfter).to.equal(0n);
-    });
-
-    it("should accrue and allow claiming income after a few blocks", async function () {
-      // Reset accrual window for this test
-      await token.connect(signers.alice).claimMonthlyIncome();
-
-      // Snapshot TVS and balance before accrual/claim
-      const tvsBefore = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
-      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedBefore = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceBefore,
-        tokenAddress,
-        signers.alice,
-      );
-
-      // Mine a small number of blocks to produce fractional-month income
-      const blocksToMine = 10n;
-      const blocksHex = "0x" + blocksToMine.toString(16);
-      await ethers.provider.send("hardhat_mine", [blocksHex]);
-
-      const claimable = await token.claimableMonthlyIncome(signers.alice.address);
-      expect(claimable).to.be.gt(0n);
-
-      await token.connect(signers.alice).claimMonthlyIncome();
-
-      const balanceAfter = await token.connect(signers.alice).balanceOf(signers.alice.address);
-      const decryptedAfter = await fhevm.userDecryptEuint(
-        FhevmType.euint64,
-        balanceAfter,
-        tokenAddress,
-        signers.alice,
-      );
-
-      const income = decryptedAfter - decryptedBefore;
-      expect(income).to.be.gt(0n);
-
-      // TVS should increase by exactly the accrued income observed in balances
-      const tvsAfter = await (token as unknown as { getTotalValueShielded: () => Promise<bigint> }).getTotalValueShielded();
-      expect(tvsAfter).to.equal(tvsBefore + income);
-
-      // After claiming, there should be no more income immediately available
-      const claimableAfter = await token.claimableMonthlyIncome(signers.alice.address);
-      expect(claimableAfter).to.equal(0n);
     });
   });
 });

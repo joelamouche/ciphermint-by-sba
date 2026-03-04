@@ -30,22 +30,22 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const complianceAddress = complianceRules.address;
   console.log(`✅ ComplianceRules deployed at: ${complianceAddress}\n`);
 
-  // 3. Deploy CompliantERC20 (SetvensBA UBI token)
-  console.log("📋 Deploying SetvensBA UBI token...");
-  const token = await deploy("CompliantERC20", {
+  // 3. Deploy CompliantUBI (StevensBA UBI token)
+  console.log("📋 Deploying StevensBA UBI token...");
+  const token = await deploy("CompliantUBI", {
     from: deployer,
-    args: ["SetvensBA UBI", "SBA", complianceAddress],
+    args: ["StevensBA UBI", "SBA", complianceAddress],
     log: true,
   });
   const tokenAddress = token.address;
-  console.log(`✅ SetvensBA UBI (SBA) deployed at: ${tokenAddress}\n`);
+  console.log(`✅ StevensBA UBI (SBA) deployed at: ${tokenAddress}\n`);
 
   // 4. Setup: Set authorized caller on ComplianceRules
   console.log("🔧 Setting up contract permissions...");
   const complianceRulesContract = await ethers.getContractAt("ComplianceRules", complianceAddress);
   const setAuthorizedTx = await complianceRulesContract.setAuthorizedCaller(tokenAddress, true);
   await setAuthorizedTx.wait();
-  console.log(`✅ Set CompliantERC20 as authorized caller on ComplianceRules\n`);
+  console.log(`✅ Set CompliantUBI as authorized caller on ComplianceRules\n`);
 
   // 5. Setup: Add registrar to IdentityRegistry (deployer is already registrar by default, but we'll ensure it)
   const identityRegistryContract = await ethers.getContractAt("IdentityRegistry", registryAddress);
@@ -62,10 +62,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log(`📄 Contracts:`);
   console.log(`   - IdentityRegistry: ${registryAddress}`);
   console.log(`   - ComplianceRules: ${complianceAddress}`);
-  console.log(`   - CompliantERC20: ${tokenAddress}`);
+  console.log(`   - CompliantUBI: ${tokenAddress}`);
   console.log("");
 };
 
 export default func;
 func.id = "deploy_ciphermint";
-func.tags = ["Ciphermint", "IdentityRegistry", "ComplianceRules", "CompliantERC20"];
+func.tags = ["Ciphermint", "IdentityRegistry", "ComplianceRules", "CompliantUBI"];
