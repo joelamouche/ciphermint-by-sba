@@ -86,8 +86,8 @@
     "build:ts": "tsc --project tsconfig.json",
     "typechain": "TS_NODE_TRANSPILE_ONLY=true hardhat typechain",
     "chain": "hardhat node --network hardhat --no-deploy",
-    "deploy:localhost": "hardhat deploy --network localhost",
-    "deploy:sepolia": "hardhat deploy --network sepolia --tags Ciphermint",
+    "deploy:localhost": "hardhat run ./deploy/deploy-all.ts --network localhost",
+    "deploy:sepolia": "hardhat run ./deploy/deploy-all.ts --network sepolia",
     "verify:sepolia": "hardhat verify --network sepolia"
   },
   "overrides": {
