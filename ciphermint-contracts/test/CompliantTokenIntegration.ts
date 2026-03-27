@@ -1,12 +1,17 @@
 /**
  * @title Full Integration Tests
- * @notice Tests the complete flow: IdentityRegistry -> ComplianceRules -> CompliantERC20
+ * @notice Tests the complete flow: IdentityRegistry -> ComplianceRules -> MintableCompliantERC20
  * @dev Uses @fhevm/hardhat-plugin for encrypted input/output handling
  */
 
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { ethers, fhevm } from "hardhat";
-import { ComplianceRules, CompliantERC20, IdentityRegistry, IdentityRegistry__factory } from "../types";
+import {
+  ComplianceRules,
+  IdentityRegistry,
+  IdentityRegistry__factory,
+  MintableCompliantERC20,
+} from "../types";
 import { expect } from "chai";
 import { FhevmType } from "@fhevm/hardhat-plugin";
 
@@ -18,11 +23,11 @@ type Signers = {
   charlie: HardhatEthersSigner;
 };
 
-describe("Full Integration Flow", function () {
+describe("Compliant token integration (MintableCompliantERC20)", function () {
   let signers: Signers;
   let identityRegistry: IdentityRegistry;
   let complianceRules: ComplianceRules; // ComplianceRules type not yet generated
-  let token: CompliantERC20; // CompliantERC20 type not yet generated
+  let token: MintableCompliantERC20;
 
   let registryAddress: string;
   let complianceAddress: string;
@@ -41,8 +46,8 @@ describe("Full Integration Flow", function () {
   }
 
   async function deployToken(complianceAddr: string) {
-    const factory = await ethers.getContractFactory("CompliantERC20");
-    const contract = await factory.deploy("Compliant Token", "CPL", complianceAddr);
+    const factory = await ethers.getContractFactory("MintableCompliantERC20");
+    const contract = (await factory.deploy("Compliant Token", "CPL", complianceAddr)) as MintableCompliantERC20;
     return contract;
   }
 
@@ -104,11 +109,15 @@ describe("Full Integration Flow", function () {
     });
 
     it("should have compliance rules pointing to identity registry", async function () {
-      expect(await complianceRules.identityRegistry()).to.equal(registryAddress);
+      expect(await complianceRules.IDENTITY_REGISTRY()).to.equal(registryAddress);
     });
 
     it("should have token pointing to compliance rules", async function () {
       expect(await token.complianceChecker()).to.equal(complianceAddress);
+    });
+
+    it("should expose Ownable2Step owner as deployer", async function () {
+      expect(await token.owner()).to.equal(signers.owner.address);
     });
   });
 
@@ -220,7 +229,7 @@ describe("Full Integration Flow", function () {
     const UINT64_MAX = (1n << 64n) - 1n;
 
     it("should mint tokens to Alice", async function () {
-      await token.connect(signers.owner).mint(signers.alice.address, MINT_AMOUNT);
+      await token.connect(signers.owner).mintPlain(signers.alice.address, MINT_AMOUNT);
 
       const balance = await token.connect(signers.alice).balanceOf(signers.alice.address);
       const decryptedBalance = await fhevm.userDecryptEuint(FhevmType.euint64, balance, tokenAddress, signers.alice);
@@ -239,7 +248,7 @@ describe("Full Integration Flow", function () {
 
     it("should reject mint amounts above uint64 max", async function () {
       await expect(
-        token.connect(signers.owner).mint(signers.alice.address, UINT64_MAX + 1n),
+        token.connect(signers.owner).mintPlain(signers.alice.address, UINT64_MAX + 1n),
       ).to.be.revertedWithCustomError(token, "TotalSupplyOverflow");
     });
 
@@ -299,7 +308,7 @@ describe("Full Integration Flow", function () {
       const aliceBalanceHandle = await token.balanceOf(signers.alice.address);
 
       await expect(
-        token.connect(signers.bob)["transfer(address,bytes32)"](signers.bob.address, aliceBalanceHandle),
+        token.connect(signers.bob).getFunction("transfer(address,bytes32)")(signers.bob.address, aliceBalanceHandle),
       ).to.be.revertedWithCustomError(token, "UnauthorizedCiphertext");
     });
 
@@ -333,6 +342,23 @@ describe("Full Integration Flow", function () {
       );
 
       expect(aliceBalanceAfterDecrypted).to.equal(aliceBalanceBeforeDecrypted);
+    });
+  });
+
+  describe("Ownable2Step (CompliantERC20 base)", function () {
+    it("should transfer ownership in two steps", async function () {
+      await token.connect(signers.owner).transferOwnership(signers.bob.address);
+      expect(await token.owner()).to.equal(signers.owner.address);
+      expect(await token.pendingOwner()).to.equal(signers.bob.address);
+
+      await expect(token.connect(signers.alice).acceptOwnership()).to.be.revertedWithCustomError(
+        token,
+        "OwnableUnauthorizedAccount",
+      );
+
+      await token.connect(signers.bob).acceptOwnership();
+      expect(await token.owner()).to.equal(signers.bob.address);
+      expect(await token.pendingOwner()).to.equal(ethers.ZeroAddress);
     });
   });
 });

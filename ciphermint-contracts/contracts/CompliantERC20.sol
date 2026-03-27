@@ -4,6 +4,8 @@ pragma solidity ^0.8.27;
 
 import {FHE, euint64, ebool, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 // solhint-disable max-line-length
 /**
@@ -30,7 +32,7 @@ import {ZamaEthereumConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
  * 4. No-revert compliance (privacy-preserving failure handling)
  * 5. Integration with external compliance checker
  */
-contract CompliantERC20 is ZamaEthereumConfig {
+contract CompliantERC20 is ZamaEthereumConfig, Ownable2Step {
     // solhint-enable max-line-length
     // ============ Token Metadata ============
 
@@ -43,8 +45,8 @@ contract CompliantERC20 is ZamaEthereumConfig {
     /// @notice Token decimals (used for display / UI)
     uint8 public constant DECIMALS = 8;
 
-    /// @notice Total supply (public for transparency)
-    uint256 public totalSupply;
+    /// @notice Encrypted total supply (sum of all balances)
+    euint64 public totalSupply;
 
     // ============ Token State ============
 
@@ -60,10 +62,7 @@ contract CompliantERC20 is ZamaEthereumConfig {
     /// @notice Compliance checker interface (can be ComplianceRules or custom)
     IComplianceChecker public complianceChecker;
 
-    /// @notice Owner/admin
-    address public owner;
-    /// @notice Pending owner for two-step ownership transfer
-    address public pendingOwner;
+    // Ownership is handled by OpenZeppelin Ownable2Step.
 
     // ============ Events ============
 
@@ -86,24 +85,7 @@ contract CompliantERC20 is ZamaEthereumConfig {
     /// @param newChecker Address of the new compliance checker
     event ComplianceCheckerUpdated(address indexed newChecker);
 
-    /// @notice Emitted when ownership transfer is initiated
-    /// @param currentOwner Current owner address
-    /// @param pendingOwner Address that can accept ownership
-    event OwnershipTransferStarted(address indexed currentOwner, address indexed pendingOwner);
-
-    /// @notice Emitted when ownership transfer is completed
-    /// @param previousOwner Previous owner address
-    /// @param newOwner New owner address
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
-    // ============ Errors ============
-
-    /// @notice Thrown when caller is not the contract owner
-    error OnlyOwner();
-    /// @notice Thrown when caller is not the pending owner
-    error OnlyPendingOwner();
-    /// @notice Thrown when new owner is the zero address
-    error InvalidOwner();
+    // Ownership is handled by OpenZeppelin Ownable2Step.
 
     /// @notice Thrown when compliance checker is required but not set
     error ComplianceCheckerNotSet();
@@ -122,10 +104,11 @@ contract CompliantERC20 is ZamaEthereumConfig {
      * @param tokenSymbol Token symbol
      * @param checker Address of the compliance checker contract
      */
-    constructor(string memory tokenName, string memory tokenSymbol, address checker) {
+    constructor(string memory tokenName, string memory tokenSymbol, address checker) Ownable(msg.sender) {
         name = tokenName;
         symbol = tokenSymbol;
-        owner = msg.sender;
+        // Initialize encrypted total supply to 0
+        totalSupply = FHE.asEuint64(0);
         if (checker != address(0)) {
             complianceChecker = IComplianceChecker(checker);
         }
@@ -137,8 +120,7 @@ contract CompliantERC20 is ZamaEthereumConfig {
      * @notice Set the compliance checker contract
      * @param checker Address of the compliance checker
      */
-    function setComplianceChecker(address checker) external {
-        if (msg.sender != owner) revert OnlyOwner();
+    function setComplianceChecker(address checker) external onlyOwner {
         complianceChecker = IComplianceChecker(checker);
         emit ComplianceCheckerUpdated(checker);
     }
@@ -147,42 +129,15 @@ contract CompliantERC20 is ZamaEthereumConfig {
      * @notice Initiate transfer of contract ownership
      * @param newOwner Address that can accept ownership
      */
-    function transferOwnership(address newOwner) external {
-        if (msg.sender != owner) revert OnlyOwner();
-        if (newOwner == address(0)) revert InvalidOwner();
-        pendingOwner = newOwner;
-        emit OwnershipTransferStarted(owner, newOwner);
+    function transferOwnership(address newOwner) public override onlyOwner {
+        super.transferOwnership(newOwner);
     }
 
     /**
      * @notice Accept ownership transfer
      */
-    function acceptOwnership() external {
-        if (msg.sender != pendingOwner) revert OnlyPendingOwner();
-        address previousOwner = owner;
-        owner = pendingOwner;
-        pendingOwner = address(0);
-        emit OwnershipTransferred(previousOwner, owner);
-    }
-
-    /**
-     * @notice Mint tokens to an address
-     * @dev Only owner can mint. Compliance is NOT checked on mint.
-     *      UBI extensions may override this to add additional accounting.
-     * @param to Recipient address
-     * @param amount Amount to mint (plaintext)
-     */
-    function mint(address to, uint256 amount) external virtual {
-        if (msg.sender != owner) revert OnlyOwner();
-        if (amount > type(uint64).max) revert TotalSupplyOverflow();
-        if (totalSupply + amount > type(uint64).max) revert TotalSupplyOverflow();
-
-        euint64 mintAmount = FHE.asEuint64(uint64(amount));
-        _mintTo(to, mintAmount);
-
-        totalSupply += amount;
-
-        emit Mint(to, amount);
+    function acceptOwnership() public override {
+        super.acceptOwnership();
     }
 
     // ============ Token Functions ============
@@ -277,6 +232,37 @@ contract CompliantERC20 is ZamaEthereumConfig {
         return _transfer(from, to, actualAmount);
     }
 
+    /**
+     * @notice Transfer from another account (requires approval), using an already-verified ciphertext.
+     * @dev Useful for integrator contracts that verify `amount` via FHE.fromExternal in their own context.
+     * @param from Source address
+     * @param to Destination address
+     * @param amount Encrypted amount (caller must be allowed to use this handle)
+     * @return success Always true
+     */
+    function transferFrom(address from, address to, euint64 amount) external returns (bool success) {
+        if (!FHE.isSenderAllowed(amount)) revert UnauthorizedCiphertext();
+
+        // Check allowance
+        ebool hasAllowance = FHE.le(amount, allowances[from][msg.sender]);
+
+        // Reduce allowance (branch-free)
+        euint64 newAllowance = FHE.select(
+            hasAllowance,
+            FHE.sub(allowances[from][msg.sender], amount),
+            allowances[from][msg.sender]
+        );
+        allowances[from][msg.sender] = newAllowance;
+        FHE.allowThis(newAllowance);
+        FHE.allow(newAllowance, from);
+        FHE.allow(newAllowance, msg.sender);
+
+        // Only transfer if allowance was sufficient
+        euint64 actualAmount = FHE.select(hasAllowance, amount, FHE.asEuint64(0));
+
+        return _transfer(from, to, actualAmount);
+    }
+
     // ============ View Functions ============
 
     /**
@@ -327,7 +313,7 @@ contract CompliantERC20 is ZamaEthereumConfig {
      * @param amount Encrypted amount to transfer
      * @return success Always returns true (actual transfer may be 0)
      */
-    function _transfer(address from, address to, euint64 amount) internal returns (bool success) {
+    function _transfer(address from, address to, euint64 amount) internal virtual returns (bool success) {
         ebool canTransfer;
 
         if (from == to) revert SelfTransferNotAllowed();
@@ -363,8 +349,12 @@ contract CompliantERC20 is ZamaEthereumConfig {
         FHE.allowThis(newToBalance);
         FHE.allow(newFromBalance, from);
         FHE.allow(newToBalance, to);
-        FHE.allow(newFromBalance, owner);
-        FHE.allow(newToBalance, owner);
+        FHE.allow(newFromBalance, owner());
+        FHE.allow(newToBalance, owner());
+
+        // Grant totalSupply read access to active participants
+        FHE.allow(totalSupply, from);
+        FHE.allow(totalSupply, to);
 
         // Always emit (hides success/failure)
         emit Transfer(from, to);
@@ -382,7 +372,41 @@ contract CompliantERC20 is ZamaEthereumConfig {
         balances[to] = newBalance;
         FHE.allowThis(newBalance);
         FHE.allow(newBalance, to);
-        FHE.allow(newBalance, owner);
+        FHE.allow(newBalance, owner());
+        FHE.allow(totalSupply, to);
+    }
+
+    /**
+     * @notice Internal burn helper to subtract encrypted amount from a balance
+     * @param from Address to burn from
+     * @param burnAmount Encrypted amount to subtract
+     */
+    function _burnFrom(address from, euint64 burnAmount) internal {
+        euint64 newBalance = FHE.sub(balances[from], burnAmount);
+        balances[from] = newBalance;
+        FHE.allowThis(newBalance);
+        FHE.allow(newBalance, from);
+        FHE.allow(newBalance, owner());
+    }
+
+    /**
+     * @notice Internal helper to increase encrypted total supply
+     * @param amount Encrypted amount to add to total supply
+     */
+    function _increaseTotalSupply(euint64 amount) internal {
+        totalSupply = FHE.add(totalSupply, amount);
+        FHE.allowThis(totalSupply);
+        FHE.allow(totalSupply, owner());
+    }
+
+    /**
+     * @notice Internal helper to decrease encrypted total supply
+     * @param amount Encrypted amount to subtract from total supply
+     */
+    function _decreaseTotalSupply(euint64 amount) internal {
+        totalSupply = FHE.sub(totalSupply, amount);
+        FHE.allowThis(totalSupply);
+        FHE.allow(totalSupply, owner());
     }
 }
 

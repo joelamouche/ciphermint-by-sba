@@ -32,8 +32,8 @@ contract ComplianceRules is ZamaEthereumConfig {
     // solhint-enable max-line-length
     // ============ State ============
 
-    /// @notice Reference to the identity registry
-    IIdentityRegistry public immutable identityRegistry;
+    /** @notice Reference to the identity registry (immutable) */
+    IIdentityRegistry public immutable IDENTITY_REGISTRY;
 
     /// @notice Owner/admin
     address public owner;
@@ -107,7 +107,7 @@ contract ComplianceRules is ZamaEthereumConfig {
      */
     constructor(address registry) {
         if (registry == address(0)) revert RegistryNotSet();
-        identityRegistry = IIdentityRegistry(registry);
+        IDENTITY_REGISTRY = IIdentityRegistry(registry);
         owner = msg.sender;
     }
 
@@ -158,7 +158,7 @@ contract ComplianceRules is ZamaEthereumConfig {
      */
     function checkCompliance(address user) external onlyAuthorizedOrSelf(user) returns (ebool) {
         // Check if user is attested
-        if (!identityRegistry.isAttested(user)) {
+        if (!IDENTITY_REGISTRY.isAttested(user)) {
             ebool notAttestedResult = FHE.asEbool(false);
             FHE.allowThis(notAttestedResult);
             FHE.allow(notAttestedResult, msg.sender);
@@ -167,7 +167,7 @@ contract ComplianceRules is ZamaEthereumConfig {
         }
 
         // Check if user is over 18
-        ebool isOver18 = identityRegistry.isOver18(user);
+        ebool isOver18 = IDENTITY_REGISTRY.isOver18(user);
 
         // Store and grant permissions
         complianceResults[user] = isOver18;

@@ -3,7 +3,8 @@ import "@nomicfoundation/hardhat-chai-matchers";
 import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-verify";
 import "@typechain/hardhat";
-import "hardhat-deploy";
+// NOTE: hardhat-deploy pulls in zksync-web3 (ethers v5) which breaks with ethers v6.
+// Re-enable only if you migrate deploy tooling to ethers v6 compatible packages.
 import "hardhat-gas-reporter";
 import type { HardhatUserConfig } from "hardhat/config";
 import "solidity-coverage";

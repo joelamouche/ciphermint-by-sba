@@ -101,7 +101,7 @@ describe("CompliantUBI Integration Flow", function () {
     });
 
     it("should have compliance rules pointing to identity registry", async function () {
-      expect(await complianceRules.identityRegistry()).to.equal(registryAddress);
+      expect(await complianceRules.IDENTITY_REGISTRY()).to.equal(registryAddress);
     });
 
     it("should have token pointing to compliance rules", async function () {
@@ -141,9 +141,6 @@ describe("CompliantUBI Integration Flow", function () {
       const claimedStatus = await token.connect(signers.alice).hasClaimedMint(signers.alice.address);
       const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.alice);
       expect(hasClaimed).to.be.true;
-
-      const tvs = await token.getTotalValueShielded();
-      expect(tvs).to.equal(decryptedAfter);
     });
 
     it("should not mint on second UBI claim", async function () {
@@ -166,8 +163,6 @@ describe("CompliantUBI Integration Flow", function () {
     });
 
     it("should not mint UBI for non-compliant user", async function () {
-      const tvsBefore = await token.getTotalValueShielded();
-
       await token.connect(signers.charlie).claimTokens();
 
       const balanceAfter = await token.connect(signers.charlie).balanceOf(signers.charlie.address);
@@ -183,9 +178,6 @@ describe("CompliantUBI Integration Flow", function () {
       const claimedStatus = await token.connect(signers.charlie).hasClaimedMint(signers.charlie.address);
       const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.charlie);
       expect(hasClaimed).to.be.false;
-
-      const tvsAfter = await token.getTotalValueShielded();
-      expect(tvsAfter).to.equal(tvsBefore + CLAIM_AMOUNT);
     });
 
     it("should not accrue income before initial claimTokens", async function () {
@@ -212,7 +204,13 @@ describe("CompliantUBI Integration Flow", function () {
       await token.connect(signers.alice).claimTokens();
       await token.connect(signers.alice).claimMonthlyIncome();
 
-      const tvsBefore = await token.getTotalValueShielded();
+      const balanceBefore = await token.connect(signers.alice).balanceOf(signers.alice.address);
+      const decryptedBefore = await fhevm.userDecryptEuint(
+        FhevmType.euint64,
+        balanceBefore,
+        tokenAddress,
+        signers.alice,
+      );
 
       const blocksToMine = 10n;
       const blocksHex = "0x" + blocksToMine.toString(16);
@@ -227,9 +225,7 @@ describe("CompliantUBI Integration Flow", function () {
       const decryptedAfter = await fhevm.userDecryptEuint(FhevmType.euint64, balanceAfter, tokenAddress, signers.alice);
 
       expect(decryptedAfter).to.be.gt(CLAIM_AMOUNT);
-
-      const tvsAfter = await token.getTotalValueShielded();
-      expect(tvsAfter).to.be.gt(tvsBefore);
+      expect(decryptedAfter).to.be.gt(decryptedBefore);
 
       const claimableAfter = await token.claimableMonthlyIncome(signers.alice.address);
       expect(claimableAfter).to.equal(0n);

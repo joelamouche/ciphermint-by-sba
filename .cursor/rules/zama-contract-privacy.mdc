@@ -1,0 +1,13 @@
+---
+description: Zama FHE contract privacy guardrails
+globs: ciphermint-contracts/contracts/**/*.sol
+alwaysApply: false
+---
+
+# Zama Contract Privacy Rules
+
+- Never introduce plaintext mirrors, plaintext copies, or plaintext params for values that are encrypted on-chain (`euint*`, `ebool`, ciphertext handles).
+- Prefer encrypted-only flows end-to-end: parse with `FHE.fromExternal`, operate with FHE ops, and keep state encrypted.
+- Do not add convenience plaintext state for accounting if it leaks user-sensitive amounts.
+- If a plaintext value is absolutely unavoidable for protocol reasons, stop and ask for explicit user approval before implementing.
+

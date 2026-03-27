@@ -1,0 +1,14 @@
+---
+description: Smart contract balance assertions must be exact
+globs: ciphermint-contracts/test/**/*.ts
+alwaysApply: false
+---
+
+# Balance Testing Rules
+
+- For every transaction that changes balances, capture balances before and after for all affected tokens/accounts.
+- Use exact equality assertions for deltas (e.g., `after - before === expectedDelta`).
+- Do not use loose comparators (`gt`, `lt`, `gte`, `lte`) for transfer/payout amount validation.
+- For revert paths, assert balances are unchanged before vs after.
+- Compute expected amounts with the same deterministic integer math/scaling used by contracts.
+

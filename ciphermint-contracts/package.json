@@ -29,11 +29,13 @@
     "hardhat"
   ],
   "dependencies": {
-    "encrypted-types": "^0.0.4",
-    "@fhevm/solidity": "^0.9.1"
+    "@fhevm/solidity": "^0.9.1",
+    "@openzeppelin/contracts": "^5.6.1",
+    "encrypted-types": "^0.0.4"
   },
   "devDependencies": {
-    "@fhevm/hardhat-plugin": "^0.3.0-3",
+    "@fhevm/hardhat-plugin": "0.3.0-3",
+    "@fhevm/mock-utils": "0.3.0-3",
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
     "@nomicfoundation/hardhat-ethers": "^3.1.0",
     "@nomicfoundation/hardhat-network-helpers": "^1.1.0",
@@ -45,7 +47,7 @@
     "@types/node": "^20.19.8",
     "@typescript-eslint/eslint-plugin": "^8.37.0",
     "@typescript-eslint/parser": "^8.37.0",
-    "@zama-fhe/relayer-sdk": "^0.3.0-6",
+    "@zama-fhe/relayer-sdk": "0.3.0-6",
     "chai": "^4.5.0",
     "chai-as-promised": "^8.0.1",
     "cross-env": "^7.0.3",
@@ -53,8 +55,7 @@
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
     "ethers": "^6.15.0",
-    "hardhat": "^2.26.0",
-    "hardhat-deploy": "^0.11.45",
+    "hardhat": "^2.28.6",
     "hardhat-gas-reporter": "^2.3.0",
     "mocha": "^11.7.1",
     "prettier": "^3.6.2",
@@ -72,8 +73,8 @@
   ],
   "scripts": {
     "clean": "rimraf ./fhevmTemp ./artifacts ./cache ./coverage ./types ./coverage.json ./dist && npm run typechain",
-    "compile": "cross-env TS_NODE_TRANSPILE_ONLY=true hardhat compile",
-    "coverage": "cross-env SOLIDITY_COVERAGE=true hardhat coverage --solcoverjs ./.solcover.js --temp artifacts --testfiles \"test/**/*.ts\" && npm run typechain",
+    "compile": "TS_NODE_TRANSPILE_ONLY=true hardhat compile",
+    "coverage": "SOLIDITY_COVERAGE=true hardhat coverage --solcoverjs ./.solcover.js --temp artifacts --testfiles \"test/**/*.ts\" && npm run typechain",
     "lint": "npm run lint:sol && npm run lint:ts && npm run prettier:check",
     "lint:sol": "solhint --max-warnings 0 \"contracts/**/*.sol\"",
     "lint:ts": "eslint --ignore-path ./.eslintignore --ext .js,.ts .",
@@ -83,13 +84,16 @@
     "test": "hardhat test",
     "test:sepolia": "hardhat test --network sepolia",
     "build:ts": "tsc --project tsconfig.json",
-    "typechain": "cross-env TS_NODE_TRANSPILE_ONLY=true hardhat typechain",
+    "typechain": "TS_NODE_TRANSPILE_ONLY=true hardhat typechain",
     "chain": "hardhat node --network hardhat --no-deploy",
     "deploy:localhost": "hardhat deploy --network localhost",
     "deploy:sepolia": "hardhat deploy --network sepolia --tags Ciphermint",
     "verify:sepolia": "hardhat verify --network sepolia"
   },
   "overrides": {
+    "@fhevm/hardhat-plugin": "0.3.0-3",
+    "@fhevm/mock-utils": "0.3.0-3",
+    "@zama-fhe/relayer-sdk": "0.3.0-6",
     "ws@>=7.0.0 <7.5.10": ">=7.5.10",
     "axios@>=1.3.2 <=1.7.3": ">=1.7.4",
     "elliptic@>=4.0.0 <=6.5.6": ">=6.5.7",

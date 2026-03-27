@@ -5,6 +5,7 @@ import {euint8, ebool, externalEuint8} from "@fhevm/solidity/lib/FHE.sol";
 
 /**
  * @title IIdentityRegistry
+ * @author Stevens Blockchain Advisory
  * @notice Interface for the encrypted identity registry contract
  * @dev Defines the interface for managing encrypted identity attributes and verification
  */

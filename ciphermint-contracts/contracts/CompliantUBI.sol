@@ -6,8 +6,11 @@ import {CompliantERC20} from "./CompliantERC20.sol";
 
 /**
  * @title CompliantUBI
- * @notice UBI layer on top of CompliantERC20
- * @dev Implements initial and per-block UBI minting on top of compliant transfers.
+ * @author Stevens Blockchain Advisory
+ * @notice UBI layer and monetary policy on top of CompliantERC20
+ * @dev
+ *  - Implements initial and per-block UBI minting.
+ *  - Owns mint/burn rights and total value shielded accounting.
  */
 contract CompliantUBI is CompliantERC20 {
     /// @notice Scale factor for 8 decimal places
@@ -22,8 +25,11 @@ contract CompliantUBI is CompliantERC20 {
     /// @notice Approximate number of blocks per month (used for per-block accrual)
     uint64 public constant BLOCKS_PER_MONTH = 216_000;
 
-    /// @notice Total value shielded (sum of all balances, plaintext units)
-    uint256 public totalValueShielded;
+    /// @notice Special treasury account used as a sink/source to keep TVS stable on policy operations
+    address public centralBankController;
+
+    /// @notice Accounts allowed to perform mint/burn style monetary operations
+    mapping(address controller => bool allowed) public isMinter;
 
     /// @notice Encrypted one-time mint claim status
     mapping(address account => ebool claimedMint) private claimedMints;
@@ -31,9 +37,95 @@ contract CompliantUBI is CompliantERC20 {
     /// @notice Block number when income was last claimed / UBI accrual started
     mapping(address account => uint64 lastIncomeBlock) public lastIncomeBlock;
 
-    constructor(string memory tokenName, string memory tokenSymbol, address checker)
-        CompliantERC20(tokenName, tokenSymbol, checker)
-    {}
+    /**
+     * @notice Initialize the SBA UBI token
+     * @param tokenName Token name
+     * @param tokenSymbol Token symbol
+     * @param checker Compliance checker address
+     */
+    constructor(
+        string memory tokenName,
+        string memory tokenSymbol,
+        address checker
+    ) CompliantERC20(tokenName, tokenSymbol, checker) {}
+
+    /// @notice Thrown when caller is not an authorized minter/controller
+    error OnlyMinter();
+
+    /// @notice Thrown when central bank controller account is not configured
+    error BankNotSet();
+
+    modifier onlyMinterController() {
+        if (!isMinter[msg.sender]) revert OnlyMinter();
+        _;
+    }
+
+    modifier bankControllerSet() {
+        if (centralBankController == address(0)) revert BankNotSet();
+        _;
+    }
+
+    /**
+     * @notice Configure a monetary controller (minter/burner)
+     * @param minter Controller address
+     * @param allowed Whether the controller is allowed
+     */
+    function setMinter(address minter, bool allowed) external onlyOwner {
+        isMinter[minter] = allowed;
+    }
+
+    /**
+     * @notice Set or update the central bank controller account
+     * @param controller Treasury/controller address
+     */
+    function setCentralBankController(address controller) external onlyOwner {
+        centralBankController = controller;
+    }
+
+    /// @notice Mint tokens under monetary policy, using encrypted amounts
+    /// @dev
+    ///  - Uses the centralBankController balance first (if available),
+    ///    then mints the remaining part as net-new supply.
+    ///  - TVS is only affected by UBI mints (claimTokens/claimMonthlyIncome), not by policy mints.
+    /// @param to Recipient address
+    /// @param amount Encrypted amount to mint
+    /// @return success Always true
+    function mint(address to, euint64 amount) external onlyMinterController bankControllerSet returns (bool) {
+        if (!FHE.isSenderAllowed(amount)) revert UnauthorizedCiphertext();
+
+        // Encrypted balance of the central bank controller
+        euint64 bankBalance = balances[centralBankController];
+
+        // Determine how much can be sourced from the bank vs newly minted
+        ebool bankHasEnough = FHE.le(amount, bankBalance);
+        euint64 fromBank = FHE.select(bankHasEnough, amount, bankBalance);
+        euint64 toMint = FHE.sub(amount, fromBank); // remainder to mint as new supply
+
+        // 1) Move what we can from the bank controller to the recipient (no TVS change)
+        if (to != centralBankController) {
+            _transfer(centralBankController, to, fromBank);
+        }
+
+        // 2) Mint the remaining part as net-new supply (affects encrypted totalSupply)
+        _mintTo(to, toMint);
+        _increaseTotalSupply(toMint);
+
+        return true;
+    }
+
+    /// @notice Burn tokens under monetary policy, using encrypted amounts
+    /// @param from Address to burn from
+    /// @param amount Encrypted amount to burn
+    /// @return success Always true
+    function burn(address from, euint64 amount) external onlyMinterController bankControllerSet returns (bool) {
+        if (!FHE.isSenderAllowed(amount)) revert UnauthorizedCiphertext();
+
+        // Burning is modelled as a transfer into the central bank controller so TVS stays constant.
+        _transfer(from, centralBankController, amount);
+
+        // totalValueShielded and encrypted totalSupply remain unchanged for policy burns.
+        return true;
+    }
 
     /**
      * @notice Claim 100 tokens once if compliant
@@ -53,9 +145,7 @@ contract CompliantUBI is CompliantERC20 {
         euint64 mintAmount = FHE.select(canClaim, FHE.asEuint64(CLAIM_AMOUNT), FHE.asEuint64(0));
 
         _mintTo(msg.sender, mintAmount);
-
-        // Update total value shielded based on claim amount (plaintext)
-        totalValueShielded += CLAIM_AMOUNT;
+        _increaseTotalSupply(mintAmount);
 
         ebool newClaimed = FHE.or(alreadyClaimed, canClaim);
         claimedMints[msg.sender] = newClaimed;
@@ -105,9 +195,7 @@ contract CompliantUBI is CompliantERC20 {
         euint64 mintAmount = FHE.select(isCompliant, incomeAmount, FHE.asEuint64(0));
 
         _mintTo(msg.sender, mintAmount);
-
-        // Update total value shielded based on accrued income (plaintext)
-        totalValueShielded += plainIncome;
+        _increaseTotalSupply(mintAmount);
 
         // Reset accrual window to current block to avoid residual fractional income
         lastIncomeBlock[msg.sender] = uint64(block.number);
@@ -122,14 +210,6 @@ contract CompliantUBI is CompliantERC20 {
      */
     function hasClaimedMint(address account) external view returns (ebool) {
         return claimedMints[account];
-    }
-
-    /**
-     * @notice Get the total value shielded (sum of all balances, plaintext)
-     * @return Total value shielded
-     */
-    function getTotalValueShielded() external view returns (uint256) {
-        return totalValueShielded;
     }
 
     /**
@@ -148,4 +228,3 @@ contract CompliantUBI is CompliantERC20 {
         return income;
     }
 }
-
