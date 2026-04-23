@@ -55,5 +55,7 @@ heroku container:release web -a "${APP_NAME}"
 heroku open -a "${APP_NAME}" || true
 WEB_URL="$(heroku apps:info -a "${APP_NAME}" | awk -F': ' '/Web URL/ {print $2}')"
 WEB_URL="${WEB_URL:-https://${APP_NAME}.herokuapp.com/}"
+WEB_URL="$(echo "${WEB_URL}" | tr -d '[:space:]')"
+WEB_URL="${WEB_URL%/}/"
 echo "Health check:"
 curl -fsS "${WEB_URL}health" || true
