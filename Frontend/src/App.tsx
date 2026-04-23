@@ -256,11 +256,12 @@ export default function App() {
   const {
     csbaBalance,
     pendingCsbaAmount,
+    pendingRequests,
+    maturedRequestIndices,
     pendingSbaEstimate,
     pendingActive,
     pendingUnlockBlock,
     blocksUntilUnlock,
-    canCompleteWithdraw,
     sharePriceScaled,
     monthlyRateBps,
     blocksPerMonth,
@@ -280,6 +281,7 @@ export default function App() {
     deposit,
     requestWithdraw,
     completeWithdraw,
+    completeWithdrawMany,
     depositState,
     requestState,
     completeState,
@@ -316,8 +318,12 @@ export default function App() {
     await requestWithdraw(withdrawRequestAmount);
   }
 
-  async function handleVaultCompleteWithdraw() {
-    await completeWithdraw();
+  async function handleVaultCompleteWithdraw(requestIndex: number) {
+    await completeWithdraw(requestIndex);
+  }
+
+  async function handleVaultCompleteMatured() {
+    await completeWithdrawMany(maturedRequestIndices);
   }
 
   useEffect(() => {
@@ -461,14 +467,10 @@ export default function App() {
                 onWithdrawAmountChange={setWithdrawRequestAmount}
                 onDeposit={handleVaultDeposit}
                 onRequestWithdraw={handleVaultRequestWithdraw}
-                onCompleteWithdraw={handleVaultCompleteWithdraw}
                 depositStatus={depositState.status}
                 depositConfirmationsRemaining={depositState.confirmationsRemaining}
                 requestStatus={requestState.status}
                 requestConfirmationsRemaining={requestState.confirmationsRemaining}
-                completeStatus={completeState.status}
-                completeConfirmationsRemaining={completeState.confirmationsRemaining}
-                canCompleteWithdraw={canCompleteWithdraw}
                 hasPendingWithdraw={pendingActive}
                 depositExceeded={depositExceeded}
                 withdrawExceeded={withdrawExceeded}
@@ -529,6 +531,10 @@ export default function App() {
                   sharePriceScaled={sharePriceScaled}
                   monthlyRateBps={monthlyRateBps}
                   blocksPerMonth={blocksPerMonth}
+                  pendingRequests={pendingRequests}
+                  completeStatus={completeState.status}
+                  onCompleteRequest={handleVaultCompleteWithdraw}
+                  onCompleteMatured={handleVaultCompleteMatured}
                 />
                 <BalanceCard
                   balance={balance}

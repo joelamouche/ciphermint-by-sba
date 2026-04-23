@@ -24,7 +24,7 @@ contract CipherCentralBank is CompliantERC20 {
     /// @notice SBA per 1 CSBA unit, scaled by 1e8 (starts 1:1)
     uint256 public sharePriceScaled = 1e8;
 
-    /// @notice Pending exit: CSBA locked until unlock block
+    /// @notice Pending exit entry: CSBA locked until unlock block
     struct PendingWithdraw {
         /// @notice Encrypted CSBA amount locked for withdrawal
         euint64 csbaAmountEnc;
@@ -32,8 +32,8 @@ contract CipherCentralBank is CompliantERC20 {
         bool active;
     }
 
-    /// @notice Pending withdraw requests by user
-    mapping(address user => PendingWithdraw pending) public pendingWithdrawals;
+    /// @notice Pending withdraw requests by user (supports concurrent requests)
+    mapping(address user => PendingWithdraw[] pending) internal pendingWithdrawals;
 
     /// @dev Caps per-call compounding iterations to avoid gas blow-ups; remaining time is applied on the next call.
     uint256 internal constant MAX_COMPOUND_STEPS = 480;
@@ -44,17 +44,18 @@ contract CipherCentralBank is CompliantERC20 {
     error PayoutFailed();
     error InvalidMonthlyRate();
     error NoPendingWithdraw();
+    error InvalidWithdrawIndex();
     error WithdrawNotReady();
-    error WithdrawAlreadyPending();
 
     /**
      * @notice Construct the central bank vault token
      * @param sba_ SBA token
      * @param checker Compliance checker for CSBA
      * @param blocksPerMonth_ Blocks per month for compounding steps
+     * @param initialOwner Owner address for admin operations
      */
-    constructor(address sba_, address checker, uint64 blocksPerMonth_)
-        CompliantERC20("CipherSBA Bills", "CSBA", checker)
+    constructor(address sba_, address checker, uint64 blocksPerMonth_, address initialOwner)
+        CompliantERC20("CipherSBA Bills", "CSBA", checker, initialOwner)
     {
         SBA = CompliantUBI(sba_);
         if (sba_ == address(0)) revert ZeroOwner();
@@ -127,65 +128,140 @@ contract CipherCentralBank is CompliantERC20 {
      * @param inputProof Zama proof for the encrypted input
      */
     function requestWithdraw(externalEuint64 encryptedAmount, bytes calldata inputProof) external {
-        if (pendingWithdrawals[msg.sender].active) revert WithdrawAlreadyPending();
-
         euint64 amt = FHE.fromExternal(encryptedAmount, inputProof);
         FHE.allowThis(amt);
         _transfer(msg.sender, address(this), amt);
 
-        pendingWithdrawals[msg.sender] = PendingWithdraw({
+        pendingWithdrawals[msg.sender].push(PendingWithdraw({
             csbaAmountEnc: amt,
             unlockBlock: uint64(block.number + BLOCKS_PER_MONTH),
             active: true
-        });
+        }));
     }
 
     /**
      * @notice Step 2: after unlock, receive SBA (mint shortfall if needed)
+     * @param requestIndex Pending request index for msg.sender
      */
-    function completeWithdraw() external {
-        PendingWithdraw storage p = pendingWithdrawals[msg.sender];
+    function completeWithdraw(uint256 requestIndex) external {
+        PendingWithdraw storage p = _pendingWithdraw(msg.sender, requestIndex);
         if (!p.active) revert NoPendingWithdraw();
         if (block.number < p.unlockBlock) revert WithdrawNotReady();
 
         updateRate();
 
         // Keep withdrawn CSBA in bank inventory for re-issuance on future deposits.
-        euint64 sbaOut = _sbaOutForShares(_takePendingWithdraw(p));
+        euint64 sbaOut = _sbaOutForShares(_takePendingWithdraw(msg.sender, p));
         _payoutSba(msg.sender, sbaOut);
     }
 
     /**
+     * @notice Complete several pending withdrawals in one transaction
+     * @param requestIndices Pending request indices for msg.sender
+     */
+    function completeWithdrawMany(uint256[] calldata requestIndices) external {
+        if (requestIndices.length == 0) revert NoPendingWithdraw();
+
+        updateRate();
+
+        euint64 totalSbaOut = FHE.asEuint64(0);
+        for (uint256 i = 0; i < requestIndices.length; ++i) {
+            PendingWithdraw storage p = _pendingWithdraw(msg.sender, requestIndices[i]);
+            if (!p.active) revert NoPendingWithdraw();
+            if (block.number < p.unlockBlock) revert WithdrawNotReady();
+
+            euint64 sbaOut = _sbaOutForShares(_takePendingWithdraw(msg.sender, p));
+            totalSbaOut = FHE.add(totalSbaOut, sbaOut);
+        }
+
+        _payoutSba(msg.sender, totalSbaOut);
+    }
+
+    /**
+     * @notice Number of pending withdrawal entries stored for a user
+     * @param user Address to query
+     * @return count Number of stored pending withdrawal entries
+     */
+    function getPendingWithdrawCount(address user) external view returns (uint256 count) {
+        count = pendingWithdrawals[user].length;
+    }
+
+    /**
+     * @notice Read one pending withdrawal entry by index
+     * @param user Address to query
+     * @param requestIndex Pending request index
+     * @return csbaAmountEnc Encrypted CSBA amount locked for this request
+     * @return unlockBlock Block number when the request becomes completable
+     * @return active Whether the request is still active
+     */
+    function getPendingWithdraw(address user, uint256 requestIndex)
+        external
+        view
+        returns (euint64 csbaAmountEnc, uint64 unlockBlock, bool active)
+    {
+        PendingWithdraw storage p = _pendingWithdraw(user, requestIndex);
+        return (p.csbaAmountEnc, p.unlockBlock, p.active);
+    }
+
+    /**
      * @notice Consume and clear the caller's pending withdrawal record
+     * @param user Pending withdrawal owner
      * @param p Pending withdrawal storage reference
      * @return csbaAmount Encrypted CSBA amount that was locked
      */
-    function _takePendingWithdraw(PendingWithdraw storage p) internal returns (euint64 csbaAmount) {
+    function _takePendingWithdraw(address user, PendingWithdraw storage p) internal returns (euint64 csbaAmount) {
         csbaAmount = p.csbaAmountEnc;
 
         p.active = false;
         euint64 z = FHE.asEuint64(0);
         p.csbaAmountEnc = z;
         FHE.allowThis(z);
-        FHE.allow(z, msg.sender);
+        FHE.allow(z, user);
         FHE.allow(z, owner());
         p.unlockBlock = 0;
     }
 
+    /**
+     * @notice Resolve a pending withdrawal storage slot for a user/index
+     * @param user Pending withdrawal owner
+     * @param requestIndex Pending withdrawal index
+     * @return p Pending withdrawal storage reference
+     */
+    function _pendingWithdraw(address user, uint256 requestIndex) internal view returns (PendingWithdraw storage p) {
+        uint256 length = pendingWithdrawals[user].length;
+        if (length == 0 || requestIndex > length - 1) revert InvalidWithdrawIndex();
+        p = pendingWithdrawals[user][requestIndex];
+    }
+
+    /**
+     * @notice Convert CSBA shares to SBA at current share price
+     * @param csbaAmount Encrypted CSBA share amount
+     * @return sbaOut Encrypted SBA payout amount
+     */
     function _sbaOutForShares(euint64 csbaAmount) internal returns (euint64 sbaOut) {
         if (sharePriceScaled > type(uint64).max) revert TotalSupplyOverflow();
         sbaOut = FHE.mul(csbaAmount, uint64(sharePriceScaled));
         sbaOut = FHE.div(sbaOut, uint64(1e8));
     }
 
+    /**
+     * @notice Mint/payout SBA to a withdrawal recipient
+     * @param to Recipient address
+     * @param sbaOut Encrypted SBA payout amount
+     */
     function _payoutSba(address to, euint64 sbaOut) internal {
         FHE.allow(sbaOut, address(SBA));
         if (!SBA.mint(to, sbaOut)) revert PayoutFailed();
     }
 
     /**
+     * @notice Transfer CSBA with bank-custody bypass for compliance checks
      * @dev Allow bank custody/release flows to bypass compliance gating.
      *      Non-bank transfers keep CompliantERC20's compliance checks.
+     * @param from Source address
+     * @param to Destination address
+     * @param amount Encrypted transfer amount
+     * @return success True when transfer path completes
      */
     function _transfer(address from, address to, euint64 amount) internal override returns (bool success) {
         if (from == address(this) || to == address(this)) {

@@ -177,18 +177,21 @@ export function useVaultActions({
     }
   };
 
-  const completeWithdraw = async () => {
+  const completeWithdraw = async (requestIndex: number) => {
     setError(null);
     try {
       if (!CIPHER_CENTRAL_BANK_ADDRESS) {
         throw new Error("Bank address is not configured.");
+      }
+      if (!Number.isInteger(requestIndex) || requestIndex < 0) {
+        throw new Error("Invalid withdrawal request index.");
       }
       setCompleteState({ status: "loading", confirmationsRemaining: null });
       const hash = await writeContractAsync({
         address: CIPHER_CENTRAL_BANK_ADDRESS,
         abi: cipherCentralBankAbi,
         functionName: "completeWithdraw",
-        args: [],
+        args: [BigInt(requestIndex)],
       });
       setCompleteState({
         status: "confirming",
@@ -202,10 +205,45 @@ export function useVaultActions({
     }
   };
 
+  const completeWithdrawMany = async (requestIndices: number[]) => {
+    setError(null);
+    try {
+      if (!CIPHER_CENTRAL_BANK_ADDRESS) {
+        throw new Error("Bank address is not configured.");
+      }
+      if (!requestIndices.length) {
+        throw new Error("No matured withdrawal requests selected.");
+      }
+      const normalized = requestIndices.map((value) => {
+        if (!Number.isInteger(value) || value < 0) {
+          throw new Error("Invalid withdrawal request index.");
+        }
+        return BigInt(value);
+      });
+      setCompleteState({ status: "loading", confirmationsRemaining: null });
+      const hash = await writeContractAsync({
+        address: CIPHER_CENTRAL_BANK_ADDRESS,
+        abi: cipherCentralBankAbi,
+        functionName: "completeWithdrawMany",
+        args: [normalized],
+      });
+      setCompleteState({
+        status: "confirming",
+        confirmationsRemaining: REQUIRED_CONFIRMATIONS,
+      });
+      await waitForConfirmations(hash, setCompleteState);
+      onSuccess?.();
+    } catch (err) {
+      setCompleteState({ status: "error", confirmationsRemaining: null });
+      setError(err instanceof Error ? err.message : "Batch complete withdraw failed.");
+    }
+  };
+
   return {
     deposit,
     requestWithdraw,
     completeWithdraw,
+    completeWithdrawMany,
     depositState,
     requestState,
     completeState,

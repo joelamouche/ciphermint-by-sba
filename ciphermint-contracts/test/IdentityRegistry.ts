@@ -14,7 +14,8 @@ type Signers = {
 
 async function deployFixture() {
   const factory = (await ethers.getContractFactory("IdentityRegistry")) as IdentityRegistry__factory;
-  const identityRegistry = (await factory.deploy()) as IdentityRegistry;
+  const [owner] = await ethers.getSigners();
+  const identityRegistry = (await factory.deploy(owner.address)) as IdentityRegistry;
   const identityRegistryAddress = await identityRegistry.getAddress();
 
   return { identityRegistry, identityRegistryAddress };

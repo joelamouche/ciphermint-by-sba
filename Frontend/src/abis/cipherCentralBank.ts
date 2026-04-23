@@ -23,7 +23,14 @@ export const cipherCentralBankAbi = [
     type: "function",
     name: "completeWithdraw",
     stateMutability: "nonpayable",
-    inputs: [],
+    inputs: [{ name: "requestIndex", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "completeWithdrawMany",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "requestIndices", type: "uint256[]" }],
     outputs: [],
   },
   {
@@ -35,9 +42,19 @@ export const cipherCentralBankAbi = [
   },
   {
     type: "function",
-    name: "pendingWithdrawals",
+    name: "getPendingWithdrawCount",
     stateMutability: "view",
     inputs: [{ name: "user", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getPendingWithdraw",
+    stateMutability: "view",
+    inputs: [
+      { name: "user", type: "address" },
+      { name: "requestIndex", type: "uint256" },
+    ],
     outputs: [
       { name: "csbaAmountEnc", type: "bytes32" },
       { name: "unlockBlock", type: "uint64" },

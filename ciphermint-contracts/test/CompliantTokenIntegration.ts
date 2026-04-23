@@ -35,19 +35,22 @@ describe("Compliant token integration (MintableCompliantERC20)", function () {
 
   async function deployIdentityRegistry() {
     const factory = (await ethers.getContractFactory("IdentityRegistry")) as IdentityRegistry__factory;
-    const contract = (await factory.deploy()) as IdentityRegistry;
+    const [owner] = await ethers.getSigners();
+    const contract = (await factory.deploy(owner.address)) as IdentityRegistry;
     return contract;
   }
 
   async function deployComplianceRules(registryAddr: string) {
     const factory = await ethers.getContractFactory("ComplianceRules");
-    const contract = await factory.deploy(registryAddr);
+    const [owner] = await ethers.getSigners();
+    const contract = await factory.deploy(registryAddr, owner.address);
     return contract;
   }
 
   async function deployToken(complianceAddr: string) {
     const factory = await ethers.getContractFactory("MintableCompliantERC20");
-    const contract = (await factory.deploy("Compliant Token", "CPL", complianceAddr)) as MintableCompliantERC20;
+    const [owner] = await ethers.getSigners();
+    const contract = (await factory.deploy("Compliant Token", "CPL", complianceAddr, owner.address)) as MintableCompliantERC20;
     return contract;
   }
 

@@ -83,14 +83,16 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
 
     // ============ Constructor ============
 
-    /// @notice Initializes the registry with the deployer as owner and initial registrar
-    constructor() {
-        owner = msg.sender;
-        registrars[msg.sender] = true;
+    /// @notice Initializes the registry with explicit owner/initial registrar
+    /// @param initialOwner Owner address for admin operations
+    constructor(address initialOwner) {
+        if (initialOwner == address(0)) revert InvalidOwner();
+        owner = initialOwner;
+        registrars[initialOwner] = true;
         // Initialize current year offset (e.g., 126 for 2026)
         currentYearOffset = FHE.asEuint8(126);
         FHE.allowThis(currentYearOffset);
-        emit RegistrarAdded(msg.sender);
+        emit RegistrarAdded(initialOwner);
     }
 
     // ============ Registrar Management ============

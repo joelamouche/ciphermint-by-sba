@@ -1,4 +1,5 @@
 import type { Status } from "../App";
+import type { PendingVaultRequest } from "../hooks/useVaultData";
 import { formatTokenAmount } from "../lib/tokenFormat";
 
 interface VaultInfoCardProps {
@@ -14,6 +15,10 @@ interface VaultInfoCardProps {
   sharePriceScaled?: bigint;
   monthlyRateBps?: bigint;
   blocksPerMonth?: bigint;
+  pendingRequests: PendingVaultRequest[];
+  completeStatus: Status;
+  onCompleteRequest: (requestIndex: number) => void;
+  onCompleteMatured: () => void;
 }
 
 export function VaultInfoCard({
@@ -29,6 +34,10 @@ export function VaultInfoCard({
   sharePriceScaled,
   monthlyRateBps,
   blocksPerMonth,
+  pendingRequests,
+  completeStatus,
+  onCompleteRequest,
+  onCompleteMatured,
 }: VaultInfoCardProps) {
   const encryptedCsba = csbaBalance == null;
   const encryptedPending = pendingCsbaAmount == null;
@@ -83,6 +92,10 @@ export function VaultInfoCard({
           </strong>
         </div>
         <div>
+          <span>Pending requests</span>
+          <strong>{pendingRequests.length}</strong>
+        </div>
+        <div>
           <span>Current block</span>
           <strong>{currentBlock != null ? currentBlock.toString() : "-"}</strong>
         </div>
@@ -103,6 +116,52 @@ export function VaultInfoCard({
           <strong>{blocksPerMonth != null ? blocksPerMonth.toString() : "-"}</strong>
         </div>
       </div>
+      {pendingRequests.length > 0 && (
+        <div className="status-grid">
+          <div className="status-row">
+            <span>Matured requests</span>
+            <button
+              type="button"
+              className="ghost"
+              onClick={onCompleteMatured}
+              disabled={
+                completeStatus === "loading" ||
+                completeStatus === "confirming" ||
+                !pendingRequests.some((req) => req.ready)
+              }
+            >
+              {completeStatus === "loading"
+                ? "Submitting..."
+                : completeStatus === "confirming"
+                  ? "Waiting..."
+                  : "Complete all matured"}
+            </button>
+          </div>
+          {pendingRequests.map((request) => (
+            <div key={request.index} className="status-row">
+              <span>
+                #{request.index} {formatTokenAmount(request.amountCsba)} CSBA (
+                {request.ready
+                  ? "ready"
+                  : `${request.blocksUntilUnlock.toString()} blocks`}
+                )
+              </span>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => onCompleteRequest(request.index)}
+                disabled={
+                  !request.ready ||
+                  completeStatus === "loading" ||
+                  completeStatus === "confirming"
+                }
+              >
+                Complete
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

@@ -1,10 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useBlockNumber, useReadContract, useSignTypedData } from "wagmi";
+import {
+  useBlockNumber,
+  usePublicClient,
+  useReadContract,
+  useSignTypedData,
+} from "wagmi";
 import type { Status } from "../App";
 import { cipherCentralBankAbi } from "../abis/cipherCentralBank";
 import { CIPHER_CENTRAL_BANK_ADDRESS } from "../config";
 import { userDecryptEuint64 } from "../lib/fhevm";
+
+export interface PendingVaultRequest {
+  index: number;
+  amountCsba: bigint;
+  amountSbaEstimate: bigint;
+  unlockBlock: bigint;
+  active: boolean;
+  ready: boolean;
+  blocksUntilUnlock: bigint;
+}
 
 interface UseVaultDataParams {
   userAddress?: `0x${string}`;
@@ -13,8 +28,11 @@ interface UseVaultDataParams {
 
 export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
   const { signTypedDataAsync } = useSignTypedData();
+  const publicClient = usePublicClient();
   const [csbaBalance, setCsbaBalance] = useState<bigint | null>(null);
-  const [pendingCsbaAmount, setPendingCsbaAmount] = useState<bigint | null>(null);
+  const [pendingRequests, setPendingRequests] = useState<PendingVaultRequest[]>(
+    []
+  );
 
   const { data: sharePriceScaled, refetch: refetchSharePrice } = useReadContract({
     address: CIPHER_CENTRAL_BANK_ADDRESS,
@@ -37,10 +55,10 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
     query: { enabled: Boolean(CIPHER_CENTRAL_BANK_ADDRESS) },
   });
 
-  const { data: pendingRaw, refetch: refetchPending } = useReadContract({
+  const { refetch: refetchPendingCount } = useReadContract({
     address: CIPHER_CENTRAL_BANK_ADDRESS,
     abi: cipherCentralBankAbi,
-    functionName: "pendingWithdrawals",
+    functionName: "getPendingWithdrawCount",
     args: userAddress ? [userAddress] : undefined,
     query: { enabled: Boolean(CIPHER_CENTRAL_BANK_ADDRESS && userAddress) },
   });
@@ -61,10 +79,17 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
       if (!userAddress || !CIPHER_CENTRAL_BANK_ADDRESS) {
         throw new Error("Connect your wallet and configure CipherCentralBank address.");
       }
-      const [{ data: csbaHandle }, { data: pending }] = await Promise.all([
+      if (!publicClient) {
+        throw new Error("Public client unavailable.");
+      }
+      const [{ data: csbaHandle }, { data: pendingCountRaw }, { data: priceRaw }] =
+        await Promise.all([
         refetchBalanceHandle(),
-        refetchPending(),
+        refetchPendingCount(),
+        refetchSharePrice(),
       ]);
+      const priceScaled = priceRaw ? BigInt(priceRaw) : 0n;
+
       if (csbaHandle == null) {
         setCsbaBalance(0n);
       } else {
@@ -77,18 +102,45 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
         setCsbaBalance(decryptedBalance ?? 0n);
       }
 
-      const tuple = (pending ?? [null, 0n, false]) as [unknown, bigint, boolean];
-      if (!tuple[2]) {
-        setPendingCsbaAmount(0n);
-        return;
+      const pendingCount = pendingCountRaw ? Number(pendingCountRaw) : 0;
+      const current = await publicClient.getBlockNumber();
+      const requests: PendingVaultRequest[] = [];
+
+      for (let i = 0; i < pendingCount; i += 1) {
+        const tuple = (await publicClient.readContract({
+          address: CIPHER_CENTRAL_BANK_ADDRESS,
+          abi: cipherCentralBankAbi,
+          functionName: "getPendingWithdraw",
+          args: [userAddress, BigInt(i)],
+        })) as [unknown, bigint, boolean];
+        const active = Boolean(tuple[2]);
+        if (!active) continue;
+
+        const decryptedPending = await userDecryptEuint64({
+          encryptedValue: tuple[0],
+          contractAddress: CIPHER_CENTRAL_BANK_ADDRESS,
+          userAddress,
+          signTypedDataAsync,
+        });
+        const amountCsba = decryptedPending ?? 0n;
+        const unlockBlock = BigInt(tuple[1]);
+        const blocksUntilUnlock = unlockBlock > current ? unlockBlock - current : 0n;
+        const ready = unlockBlock > 0n && current >= unlockBlock;
+        const amountSbaEstimate =
+          priceScaled > 0n ? (amountCsba * priceScaled) / 10n ** 8n : 0n;
+
+        requests.push({
+          index: i,
+          amountCsba,
+          amountSbaEstimate,
+          unlockBlock,
+          active: true,
+          ready,
+          blocksUntilUnlock,
+        });
       }
-      const decryptedPending = await userDecryptEuint64({
-        encryptedValue: tuple[0],
-        contractAddress: CIPHER_CENTRAL_BANK_ADDRESS,
-        userAddress,
-        signTypedDataAsync,
-      });
-      setPendingCsbaAmount(decryptedPending ?? 0n);
+
+      setPendingRequests(requests);
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Vault refresh failed.");
@@ -98,26 +150,34 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
   useEffect(() => {
     decryptMutation.reset();
     setCsbaBalance(null);
-    setPendingCsbaAmount(null);
+    setPendingRequests([]);
   }, [userAddress]);
 
-  const pendingTuple = (pendingRaw ?? [0n, 0n, false]) as [unknown, bigint, boolean];
-  const pendingUnlockBlock = pendingTuple[1] ? BigInt(pendingTuple[1]) : 0n;
-  const pendingActive = Boolean(pendingTuple[2]);
+  const pendingActive = pendingRequests.length > 0;
+  const maturedRequestIndices = useMemo(
+    () => pendingRequests.filter((r) => r.ready).map((r) => r.index),
+    [pendingRequests]
+  );
+  const canCompleteWithdraw = maturedRequestIndices.length > 0;
+  const pendingUnlockBlock = useMemo(() => {
+    if (!pendingRequests.length) return 0n;
+    return pendingRequests.reduce(
+      (latest, req) => (req.unlockBlock > latest ? req.unlockBlock : latest),
+      0n
+    );
+  }, [pendingRequests]);
   const blocksUntilUnlock =
-    pendingActive && currentBlock != null && pendingUnlockBlock > currentBlock
+    currentBlock != null && pendingUnlockBlock > currentBlock
       ? pendingUnlockBlock - currentBlock
       : 0n;
-  const canCompleteWithdraw =
-    pendingActive &&
-    currentBlock != null &&
-    pendingUnlockBlock > 0n &&
-    currentBlock >= pendingUnlockBlock;
 
   const pendingSbaEstimate = useMemo(() => {
-    if (!pendingActive || pendingCsbaAmount == null || !sharePriceScaled) return 0n;
-    return (pendingCsbaAmount * BigInt(sharePriceScaled)) / 10n ** 8n;
-  }, [pendingActive, pendingCsbaAmount, sharePriceScaled]);
+    return pendingRequests.reduce((acc, req) => acc + req.amountSbaEstimate, 0n);
+  }, [pendingRequests]);
+
+  const pendingCsbaAmount = useMemo(() => {
+    return pendingRequests.reduce((acc, req) => acc + req.amountCsba, 0n);
+  }, [pendingRequests]);
 
   const status: Status =
     decryptMutation.status === "pending"
@@ -141,6 +201,8 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
   return {
     csbaBalance,
     pendingCsbaAmount,
+    pendingRequests,
+    maturedRequestIndices,
     pendingSbaEstimate,
     pendingActive,
     pendingUnlockBlock,

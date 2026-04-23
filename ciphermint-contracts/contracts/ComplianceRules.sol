@@ -104,11 +104,13 @@ contract ComplianceRules is ZamaEthereumConfig {
     /**
      * @notice Initialize with identity registry reference
      * @param registry Address of the IdentityRegistry contract
+     * @param initialOwner Owner/admin address
      */
-    constructor(address registry) {
+    constructor(address registry, address initialOwner) {
         if (registry == address(0)) revert RegistryNotSet();
+        if (initialOwner == address(0)) revert InvalidOwner();
         IDENTITY_REGISTRY = IIdentityRegistry(registry);
-        owner = msg.sender;
+        owner = initialOwner;
     }
 
     // ============ Admin Functions ============

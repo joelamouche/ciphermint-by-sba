@@ -72,21 +72,21 @@ describe("CipherCentralBank integration", function () {
   });
 
   beforeEach(async function () {
-    registry = (await ethers.getContractFactory("IdentityRegistry").then((f) => f.deploy())) as IdentityRegistry;
+    registry = (await ethers.getContractFactory("IdentityRegistry").then((f) => f.deploy(owner.address))) as IdentityRegistry;
     registryAddr = await registry.getAddress();
     compliance = (await ethers
       .getContractFactory("ComplianceRules")
-      .then((f) => f.deploy(registryAddr))) as ComplianceRules;
+      .then((f) => f.deploy(registryAddr, owner.address))) as ComplianceRules;
     complianceAddr = await compliance.getAddress();
     sba = (await ethers
       .getContractFactory("CompliantUBI")
-      .then((f) => f.deploy("SBA", "SBA", complianceAddr))) as CompliantUBI;
+      .then((f) => f.deploy("SBA", "SBA", complianceAddr, owner.address))) as CompliantUBI;
     sbaAddr = await sba.getAddress();
     await compliance.connect(owner).setAuthorizedCaller(sbaAddr, true);
 
     bank = (await ethers
       .getContractFactory("CipherCentralBank")
-      .then((f) => f.deploy(sbaAddr, complianceAddr, BLOCKS_PER_MONTH))) as CipherCentralBank;
+      .then((f) => f.deploy(sbaAddr, complianceAddr, BLOCKS_PER_MONTH, owner.address))) as CipherCentralBank;
     bankAddr = await bank.getAddress();
     await compliance.connect(owner).setAuthorizedCaller(bankAddr, true);
 
@@ -101,7 +101,7 @@ describe("CipherCentralBank integration", function () {
 
   it("reverts on zero SBA in constructor", async function () {
     const F = await ethers.getContractFactory("CipherCentralBank");
-    await expect(F.deploy(ethers.ZeroAddress, complianceAddr, BLOCKS_PER_MONTH)).to.be.revertedWithCustomError(
+    await expect(F.deploy(ethers.ZeroAddress, complianceAddr, BLOCKS_PER_MONTH, owner.address)).to.be.revertedWithCustomError(
       F,
       "ZeroOwner",
     );
@@ -109,7 +109,7 @@ describe("CipherCentralBank integration", function () {
 
   it("reverts on zero blocksPerMonth", async function () {
     const F = await ethers.getContractFactory("CipherCentralBank");
-    await expect(F.deploy(sbaAddr, complianceAddr, 0)).to.be.revertedWithCustomError(F, "TotalSupplyOverflow");
+    await expect(F.deploy(sbaAddr, complianceAddr, 0, owner.address)).to.be.revertedWithCustomError(F, "TotalSupplyOverflow");
   });
 
   it("deposit: first depositor mints CSBA ~1:1 and credits vaultSbaAssets", async function () {
@@ -196,18 +196,18 @@ describe("CipherCentralBank integration", function () {
     expect(afterRequest.sba).to.equal(afterDeposit.sba);
     expect(afterRequest.csba).to.equal(afterDeposit.csba - DEPOSIT);
 
-    await expect(bank.connect(alice).completeWithdraw()).to.be.revertedWithCustomError(bank, "WithdrawNotReady");
+    await expect(bank.connect(alice).completeWithdraw(0)).to.be.revertedWithCustomError(bank, "WithdrawNotReady");
 
     await ethers.provider.send("hardhat_mine", ["0x" + BLOCKS_PER_MONTH.toString(16)]);
 
-    await bank.connect(alice).completeWithdraw();
+    await bank.connect(alice).completeWithdraw(0);
     const afterComplete = await readUserBalances(alice);
     const priceAfter1Month = await bank.sharePriceScaled();
     const expectedPayout = (DEPOSIT * priceAfter1Month) / 10n ** 8n;
     expect(afterComplete.sba).to.equal(afterRequest.sba + expectedPayout);
     expect(afterComplete.csba).to.equal(afterRequest.csba);
 
-    await expect(bank.connect(alice).completeWithdraw()).to.be.revertedWithCustomError(bank, "NoPendingWithdraw");
+    await expect(bank.connect(alice).completeWithdraw(0)).to.be.revertedWithCustomError(bank, "NoPendingWithdraw");
   });
 
   it("payout after 3 months is higher than after 1 month", async function () {
@@ -224,7 +224,7 @@ describe("CipherCentralBank integration", function () {
 
     const beforeA = await readUserBalances(alice);
     await ethers.provider.send("hardhat_mine", ["0x" + BLOCKS_PER_MONTH.toString(16)]);
-    await bank.connect(alice).completeWithdraw();
+    await bank.connect(alice).completeWithdraw(0);
     const afterA = await readUserBalances(alice);
     const payout1Month = afterA.sba - beforeA.sba;
     expect(afterA.csba).to.equal(beforeA.csba);
@@ -245,7 +245,7 @@ describe("CipherCentralBank integration", function () {
 
     const beforeB = await readUserBalances(alice);
     await ethers.provider.send("hardhat_mine", ["0x" + (BLOCKS_PER_MONTH * 3n).toString(16)]);
-    await bank.connect(alice).completeWithdraw();
+    await bank.connect(alice).completeWithdraw(1);
     const afterB = await readUserBalances(alice);
     const payout3Months = afterB.sba - beforeB.sba;
     expect(afterB.csba).to.equal(beforeB.csba);
@@ -264,13 +264,13 @@ describe("CipherCentralBank integration", function () {
     await bank.connect(alice).requestWithdraw(w.handles[0], w.inputProof);
 
     const before = await readUserBalances(alice);
-    await expect(bank.connect(alice).completeWithdraw()).to.be.revertedWithCustomError(bank, "WithdrawNotReady");
+    await expect(bank.connect(alice).completeWithdraw(0)).to.be.revertedWithCustomError(bank, "WithdrawNotReady");
     const after = await readUserBalances(alice);
     expect(after.sba).to.equal(before.sba);
     expect(after.csba).to.equal(before.csba);
   });
 
-  it("WithdrawAlreadyPending on second requestWithdraw", async function () {
+  it("supports multiple pending requests with independent unlock blocks", async function () {
     const a = await enc64(sbaAddr, alice, DEPOSIT);
     await sba.connect(alice).approve(bankAddr, a.handles[0], a.inputProof);
     const d = await enc64(bankAddr, alice, DEPOSIT);
@@ -278,26 +278,85 @@ describe("CipherCentralBank integration", function () {
 
     const half = DEPOSIT / 2n;
     const w1 = await enc64(bankAddr, alice, half);
-    await bank.connect(alice).requestWithdraw(w1.handles[0], w1.inputProof);
+    const tx1 = await bank.connect(alice).requestWithdraw(w1.handles[0], w1.inputProof);
+    const r1 = await tx1.wait();
+    const request1Block = BigInt(r1!.blockNumber);
+    const firstUnlock = (await bank.getPendingWithdraw(alice.address, 0))[1];
+    expect(firstUnlock).to.equal(request1Block + BLOCKS_PER_MONTH);
+
+    await ethers.provider.send("hardhat_mine", ["0x01"]);
+
     const w2 = await enc64(bankAddr, alice, half);
-    const before = await readUserBalances(alice);
-    await expect(bank.connect(alice).requestWithdraw(w2.handles[0], w2.inputProof)).to.be.revertedWithCustomError(
-      bank,
-      "WithdrawAlreadyPending",
-    );
-    const after = await readUserBalances(alice);
-    expect(after.sba).to.equal(before.sba);
-    expect(after.csba).to.equal(before.csba);
+    const tx2 = await bank.connect(alice).requestWithdraw(w2.handles[0], w2.inputProof);
+    const r2 = await tx2.wait();
+    const request2Block = BigInt(r2!.blockNumber);
+    const secondUnlock = (await bank.getPendingWithdraw(alice.address, 1))[1];
+    expect(secondUnlock).to.equal(request2Block + BLOCKS_PER_MONTH);
+
+    const count = await bank.getPendingWithdrawCount(alice.address);
+    expect(count).to.equal(2n);
+
+    await ethers.provider.send("hardhat_mine", ["0x" + (BLOCKS_PER_MONTH - 1n).toString(16)]);
+
+    const beforeFirst = await readUserBalances(alice);
+    await bank.connect(alice).completeWithdraw(0);
+    const afterFirst = await readUserBalances(alice);
+    expect(afterFirst.csba).to.equal(beforeFirst.csba);
+    expect(afterFirst.sba - beforeFirst.sba).to.equal((half * (await bank.sharePriceScaled())) / DECIMALS);
+
+    const secondAfterFirst = await bank.getPendingWithdraw(alice.address, 1);
+    expect(secondAfterFirst[2]).to.equal(true);
+
+    const currentBlock = BigInt(await ethers.provider.getBlockNumber());
+    const unlock2 = secondAfterFirst[1];
+    if (currentBlock < unlock2) {
+      await ethers.provider.send("hardhat_mine", ["0x" + (unlock2 - currentBlock).toString(16)]);
+    }
+    const beforeSecond = await readUserBalances(alice);
+    await bank.connect(alice).completeWithdraw(1);
+    const afterSecond = await readUserBalances(alice);
+    expect(afterSecond.csba).to.equal(beforeSecond.csba);
+    expect(afterSecond.sba - beforeSecond.sba).to.equal((half * (await bank.sharePriceScaled())) / DECIMALS);
   });
 
-  it("reverts requestWithdraw(0)", async function () {
+  it("reverts on invalid withdraw index", async function () {
+    await expect(bank.connect(alice).completeWithdraw(0)).to.be.revertedWithCustomError(bank, "InvalidWithdrawIndex");
+  });
+
+  it("completeWithdrawMany pays sum of matured requests", async function () {
+    const approve = await enc64(sbaAddr, alice, DEPOSIT);
+    await sba.connect(alice).approve(bankAddr, approve.handles[0], approve.inputProof);
+    const dep = await enc64(bankAddr, alice, DEPOSIT);
+    await bank.connect(alice).deposit(dep.handles[0], dep.inputProof);
+
+    const third = DEPOSIT / 3n;
+    const r1 = await enc64(bankAddr, alice, third);
+    await bank.connect(alice).requestWithdraw(r1.handles[0], r1.inputProof);
+    const r2 = await enc64(bankAddr, alice, third);
+    await bank.connect(alice).requestWithdraw(r2.handles[0], r2.inputProof);
+
+    await ethers.provider.send("hardhat_mine", ["0x" + BLOCKS_PER_MONTH.toString(16)]);
+    const before = await readUserBalances(alice);
+    await bank.connect(alice).completeWithdrawMany([0, 1]);
+    const after = await readUserBalances(alice);
+    const priceAfterPayout = await bank.sharePriceScaled();
+
+    expect(after.csba).to.equal(before.csba);
+    const expectedPayoutEach = (third * priceAfterPayout) / DECIMALS;
+    const expectedTotal = expectedPayoutEach + expectedPayoutEach;
+    expect(after.sba - before.sba).to.equal(expectedTotal);
+    await expect(bank.connect(alice).completeWithdrawMany([0, 1])).to.be.revertedWithCustomError(bank, "NoPendingWithdraw");
+  });
+
+  it("requestWithdraw(0) creates a zero-amount pending request", async function () {
     const z = await enc64(bankAddr, alice, 0n);
     await bank.connect(alice).requestWithdraw(z.handles[0], z.inputProof);
+    const count = await bank.getPendingWithdrawCount(alice.address);
+    expect(count).to.equal(1n);
+
     const before = await readUserBalances(alice);
-    await expect(bank.connect(alice).requestWithdraw(z.handles[0], z.inputProof)).to.be.revertedWithCustomError(
-      bank,
-      "WithdrawAlreadyPending",
-    );
+    await ethers.provider.send("hardhat_mine", ["0x" + BLOCKS_PER_MONTH.toString(16)]);
+    await bank.connect(alice).completeWithdraw(0);
     const after = await readUserBalances(alice);
     expect(after.sba).to.equal(before.sba);
     expect(after.csba).to.equal(before.csba);

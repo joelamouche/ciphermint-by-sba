@@ -42,12 +42,14 @@ contract CompliantUBI is CompliantERC20 {
      * @param tokenName Token name
      * @param tokenSymbol Token symbol
      * @param checker Compliance checker address
+     * @param initialOwner Owner address for admin operations
      */
     constructor(
         string memory tokenName,
         string memory tokenSymbol,
-        address checker
-    ) CompliantERC20(tokenName, tokenSymbol, checker) {}
+        address checker,
+        address initialOwner
+    ) CompliantERC20(tokenName, tokenSymbol, checker, initialOwner) {}
 
     /// @notice Thrown when caller is not an authorized minter/controller
     error OnlyMinter();

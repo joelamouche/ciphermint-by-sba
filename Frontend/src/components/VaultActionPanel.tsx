@@ -12,14 +12,10 @@ interface VaultActionPanelProps {
   onWithdrawAmountChange: (value: string) => void;
   onDeposit: () => void;
   onRequestWithdraw: () => void;
-  onCompleteWithdraw: () => void;
   depositStatus: Status;
   depositConfirmationsRemaining: number | null;
   requestStatus: Status;
   requestConfirmationsRemaining: number | null;
-  completeStatus: Status;
-  completeConfirmationsRemaining: number | null;
-  canCompleteWithdraw: boolean;
   hasPendingWithdraw: boolean;
   depositExceeded: boolean;
   withdrawExceeded: boolean;
@@ -36,14 +32,10 @@ export function VaultActionPanel({
   onWithdrawAmountChange,
   onDeposit,
   onRequestWithdraw,
-  onCompleteWithdraw,
   depositStatus,
   depositConfirmationsRemaining,
   requestStatus,
   requestConfirmationsRemaining,
-  completeStatus,
-  completeConfirmationsRemaining,
-  canCompleteWithdraw,
   hasPendingWithdraw,
   depositExceeded,
   withdrawExceeded,
@@ -160,37 +152,9 @@ export function VaultActionPanel({
         </p>
       )}
 
-      <button
-        type="button"
-        className={completeStatus === "confirming" ? "status-warn" : undefined}
-        onClick={onCompleteWithdraw}
-        disabled={
-          !isConnected ||
-          !hasPendingWithdraw ||
-          !canCompleteWithdraw ||
-          completeStatus === "loading" ||
-          completeStatus === "confirming"
-        }
-      >
-        {completeStatus === "loading"
-          ? "Submitting..."
-          : completeStatus === "confirming"
-            ? "Waiting..."
-            : completeStatus === "success"
-              ? "Completed"
-              : completeStatus === "error"
-                ? "Retry complete"
-                : "Complete withdrawal"}
-      </button>
-      {!canCompleteWithdraw && hasPendingWithdraw && (
+      {hasPendingWithdraw && (
         <p className="muted status-center">
-          Completion unlocks after the lock period ends.
-        </p>
-      )}
-      {completeStatus === "confirming" && completeConfirmationsRemaining != null && (
-        <p className="status-warn status-center">
-          {completeConfirmationsRemaining} block
-          {completeConfirmationsRemaining === 1 ? "" : "s"} confirmations remaining
+          Pending requests can be completed from the Vault Position panel once unlocked.
         </p>
       )}
     </section>

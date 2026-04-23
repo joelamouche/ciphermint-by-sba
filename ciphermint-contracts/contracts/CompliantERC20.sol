@@ -103,8 +103,11 @@ contract CompliantERC20 is ZamaEthereumConfig, Ownable2Step {
      * @param tokenName Token name
      * @param tokenSymbol Token symbol
      * @param checker Address of the compliance checker contract
+     * @param initialOwner Owner address for admin operations
      */
-    constructor(string memory tokenName, string memory tokenSymbol, address checker) Ownable(msg.sender) {
+    constructor(string memory tokenName, string memory tokenSymbol, address checker, address initialOwner)
+        Ownable(initialOwner)
+    {
         name = tokenName;
         symbol = tokenSymbol;
         // Initialize encrypted total supply to 0

@@ -1,0 +1,15 @@
+---
+description: Enforce deterministic CREATE2 and idempotent deployments
+alwaysApply: true
+---
+
+# CREATE2 Deployment Standard
+
+- Prefer deterministic `CREATE2` deployments for smart contracts.
+- Use a stable, explicit salt namespace and per-contract salt labels.
+- Before deploying, compute the predicted `CREATE2` address from salt + init code hash.
+- If code already exists at the predicted address, reuse it and do not redeploy.
+- Treat constructor args as part of determinism; if args change, address is expected to change.
+- If ownership/admin depends on constructor context, pass explicit owner/admin args (do not rely on `msg.sender` from a factory flow).
+- Keep deployment scripts idempotent: safe to run repeatedly with unchanged bytecode/config.
+- Log whether each contract was `deployed` or `reused` so behavior is auditable.

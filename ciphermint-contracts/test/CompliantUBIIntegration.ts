@@ -30,19 +30,22 @@ describe("CompliantUBI Integration Flow", function () {
 
   async function deployIdentityRegistry() {
     const factory = (await ethers.getContractFactory("IdentityRegistry")) as IdentityRegistry__factory;
-    const contract = (await factory.deploy()) as IdentityRegistry;
+    const [owner] = await ethers.getSigners();
+    const contract = (await factory.deploy(owner.address)) as IdentityRegistry;
     return contract;
   }
 
   async function deployComplianceRules(registryAddr: string) {
     const factory = await ethers.getContractFactory("ComplianceRules");
-    const contract = await factory.deploy(registryAddr);
+    const [owner] = await ethers.getSigners();
+    const contract = await factory.deploy(registryAddr, owner.address);
     return contract;
   }
 
   async function deployToken(complianceAddr: string) {
     const factory = await ethers.getContractFactory("CompliantUBI");
-    const contract = (await factory.deploy("StevensBA UBI", "SBA", complianceAddr)) as CompliantUBI;
+    const [owner] = await ethers.getSigners();
+    const contract = (await factory.deploy("StevensBA UBI", "SBA", complianceAddr, owner.address)) as CompliantUBI;
     return contract;
   }
 

@@ -11,7 +11,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   const identityRegistry = await deploy("IdentityRegistry", {
     from: deployer,
-    args: [],
+    args: [deployer],
     log: true,
   });
   const registryAddress = identityRegistry.address;

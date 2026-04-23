@@ -13,8 +13,9 @@ contract MintableCompliantERC20 is CompliantERC20 {
     constructor(
         string memory tokenName,
         string memory tokenSymbol,
-        address checker
-    ) CompliantERC20(tokenName, tokenSymbol, checker) {}
+        address checker,
+        address initialOwner
+    ) CompliantERC20(tokenName, tokenSymbol, checker, initialOwner) {}
 
     /**
      * @notice Owner-only mint using a plaintext amount (integration tests & demos).
