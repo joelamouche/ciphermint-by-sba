@@ -33,6 +33,17 @@ export const compliantErc20Abi = [
   },
   {
     type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "encryptedAmount", type: "bytes32" },
+      { name: "inputProof", type: "bytes" },
+    ],
+    outputs: [{ name: "success", type: "bool" }],
+  },
+  {
+    type: "function",
     name: "claimMonthlyIncome",
     stateMutability: "nonpayable",
     inputs: [],

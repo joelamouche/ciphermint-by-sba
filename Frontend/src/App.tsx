@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccount, useChainId, useSignMessage } from "wagmi";
 import {
   API_BASE_URL,
+  CIPHER_CENTRAL_BANK_ADDRESS,
   COMPLIANT_ERC20_ADDRESS,
   IDENTITY_REGISTRY_ADDRESS,
 } from "./config";
@@ -12,8 +13,10 @@ import {
   BalanceCard,
   Landing,
   StatusCard,
-  TvsCard,
   StepperPanel,
+  TvsCard,
+  VaultActionPanel,
+  VaultInfoCard,
 } from "./components";
 import { steps } from "./constants/steps";
 import {
@@ -27,8 +30,11 @@ import {
   useRefreshBalance,
   useRefreshMint,
   useTransferTokens,
+  useVaultActions,
+  useVaultData,
 } from "./hooks";
 import "./App.css";
+import { parseTokenAmount } from "./lib/tokenFormat";
 import {
   loadCachedBigint,
   loadCachedBoolean,
@@ -58,8 +64,12 @@ export default function App() {
   const [balance, setBalance] = useState<bigint | null>(null);
   const [transferTo, setTransferTo] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
+  const [depositAmount, setDepositAmount] = useState("");
+  const [withdrawRequestAmount, setWithdrawRequestAmount] = useState("");
   const [copied, setCopied] = useState(false);
-  const [activePage, setActivePage] = useState<"app" | "about">("app");
+  const [activePage, setActivePage] = useState<"ubi" | "vault" | "about">(
+    "ubi"
+  );
   const [kycPollingEnabled, setKycPollingEnabled] = useState(false);
   const [hasSeenLanding, setHasSeenLanding] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
@@ -68,6 +78,7 @@ export default function App() {
 
   const identityReady = Boolean(IDENTITY_REGISTRY_ADDRESS);
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
+  const vaultReady = Boolean(CIPHER_CENTRAL_BANK_ADDRESS);
 
   const { isAttested, refetchAttested } = useIdentityStatus({ address });
 
@@ -111,6 +122,29 @@ export default function App() {
 
   const isMintEncrypted = claimed === null;
   const isBalanceEncrypted = balance === null;
+
+  const parsedDepositAmount = useMemo(() => {
+    try {
+      return depositAmount.trim() ? parseTokenAmount(depositAmount) : null;
+    } catch {
+      return null;
+    }
+  }, [depositAmount]);
+
+  const parsedWithdrawAmount = useMemo(() => {
+    try {
+      return withdrawRequestAmount.trim()
+        ? parseTokenAmount(withdrawRequestAmount)
+        : null;
+    } catch {
+      return null;
+    }
+  }, [withdrawRequestAmount]);
+
+  const depositExceeded =
+    parsedDepositAmount != null &&
+    balance != null &&
+    parsedDepositAmount > balance;
 
   const activeStepId = useMemo(() => {
     if (!isConnected) return "connect";
@@ -219,6 +253,79 @@ export default function App() {
     },
   });
 
+  const {
+    csbaBalance,
+    pendingCsbaAmount,
+    pendingSbaEstimate,
+    pendingActive,
+    pendingUnlockBlock,
+    blocksUntilUnlock,
+    canCompleteWithdraw,
+    sharePriceScaled,
+    monthlyRateBps,
+    blocksPerMonth,
+    currentBlock,
+    refreshVaultData,
+    vaultStatus,
+  } = useVaultData({
+    userAddress: address,
+    setError,
+  });
+  const withdrawExceeded =
+    parsedWithdrawAmount != null &&
+    csbaBalance != null &&
+    parsedWithdrawAmount > csbaBalance;
+
+  const {
+    deposit,
+    requestWithdraw,
+    completeWithdraw,
+    depositState,
+    requestState,
+    completeState,
+  } = useVaultActions({
+    userAddress: address,
+    setError,
+    onSuccess: () => {
+      refreshVaultData();
+      handleRefreshBalance();
+    },
+  });
+
+  async function handleVaultDeposit() {
+    if (
+      parsedDepositAmount != null &&
+      balance != null &&
+      parsedDepositAmount > balance
+    ) {
+      setError("Deposit amount exceeds your available SBA balance.");
+      return;
+    }
+    await deposit(depositAmount);
+  }
+
+  async function handleVaultRequestWithdraw() {
+    if (
+      parsedWithdrawAmount != null &&
+      csbaBalance != null &&
+      parsedWithdrawAmount > csbaBalance
+    ) {
+      setError("Withdrawal request exceeds your available CSBA balance.");
+      return;
+    }
+    await requestWithdraw(withdrawRequestAmount);
+  }
+
+  async function handleVaultCompleteWithdraw() {
+    await completeWithdraw();
+  }
+
+  useEffect(() => {
+    if (!isConnected || activePage !== "vault") return;
+    refreshVaultData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, activePage, address]);
+
   function handleCompleteLanding() {
     setHasSeenLanding(true);
     if (typeof window !== "undefined") {
@@ -286,10 +393,18 @@ export default function App() {
         <nav className="topbar-actions" aria-label="Primary">
           <button
             type="button"
-            className={`nav-link ${activePage === "app" ? "active" : ""}`}
-            onClick={() => setActivePage("app")}
+            className={`nav-link ${activePage === "ubi" ? "active" : ""}`}
+            onClick={() => setActivePage("ubi")}
           >
-            Dashboard
+            UBI Token
+          </button>
+          <button
+            type="button"
+            className={`nav-link ${activePage === "vault" ? "active" : ""}`}
+            onClick={() => setActivePage("vault")}
+            disabled={!vaultReady}
+          >
+            Central Bank Vault
           </button>
           <button
             type="button"
@@ -306,31 +421,59 @@ export default function App() {
       ) : (
         <div className="layout">
           <main className="main">
-            <StepperPanel steps={steps} activeStepId={activeStepId} />
+            {activePage === "ubi" ? (
+              <>
+                <StepperPanel steps={steps} activeStepId={activeStepId} />
 
-            <ActionPanel
-              activeStepId={activeStepId}
-              isConnected={isConnected}
-              userAddress={address}
-              sessionUrl={sessionUrl}
-              kycSessionStatus={kycSessionStatus}
-              kycStatus={kycStatus}
-              canClaim={canClaim}
-              claimStatus={claimStatus}
-              transferTo={transferTo}
-              transferAmount={transferAmount}
-              transferStatus={transferStatus}
-              claimConfirmationsRemaining={claimConfirmationsRemaining}
-              transferConfirmationsRemaining={
-                transferConfirmationsRemaining
-              }
-              onStartKyc={handleStartKyc}
-              onOpenKyc={handleOpenKyc}
-              onClaim={handleClaim}
-              onTransferToChange={setTransferTo}
-              onTransferAmountChange={setTransferAmount}
-              onTransfer={handleTransfer}
-            />
+                <ActionPanel
+                  activeStepId={activeStepId}
+                  isConnected={isConnected}
+                  userAddress={address}
+                  sessionUrl={sessionUrl}
+                  kycSessionStatus={kycSessionStatus}
+                  kycStatus={kycStatus}
+                  canClaim={canClaim}
+                  claimStatus={claimStatus}
+                  transferTo={transferTo}
+                  transferAmount={transferAmount}
+                  transferStatus={transferStatus}
+                  claimConfirmationsRemaining={claimConfirmationsRemaining}
+                  transferConfirmationsRemaining={
+                    transferConfirmationsRemaining
+                  }
+                  onStartKyc={handleStartKyc}
+                  onOpenKyc={handleOpenKyc}
+                  onClaim={handleClaim}
+                  onTransferToChange={setTransferTo}
+                  onTransferAmountChange={setTransferAmount}
+                  onTransfer={handleTransfer}
+                />
+              </>
+            ) : (
+              <VaultActionPanel
+                isConnected={isConnected}
+                isAttested={Boolean(isAttested)}
+                sbaBalance={balance}
+                csbaBalance={csbaBalance}
+                depositAmount={depositAmount}
+                withdrawAmount={withdrawRequestAmount}
+                onDepositAmountChange={setDepositAmount}
+                onWithdrawAmountChange={setWithdrawRequestAmount}
+                onDeposit={handleVaultDeposit}
+                onRequestWithdraw={handleVaultRequestWithdraw}
+                onCompleteWithdraw={handleVaultCompleteWithdraw}
+                depositStatus={depositState.status}
+                depositConfirmationsRemaining={depositState.confirmationsRemaining}
+                requestStatus={requestState.status}
+                requestConfirmationsRemaining={requestState.confirmationsRemaining}
+                completeStatus={completeState.status}
+                completeConfirmationsRemaining={completeState.confirmationsRemaining}
+                canCompleteWithdraw={canCompleteWithdraw}
+                hasPendingWithdraw={pendingActive}
+                depositExceeded={depositExceeded}
+                withdrawExceeded={withdrawExceeded}
+              />
+            )}
           </main>
 
           <aside className="sidebar">
@@ -350,24 +493,57 @@ export default function App() {
               formatAddress={formatAddress}
             />
 
-            <BalanceCard
-              balance={balance}
-              isBalanceEncrypted={isBalanceEncrypted}
-              balanceStatus={balanceStatus}
-              onRefreshBalance={handleRefreshBalance}
-              claimableIncome={claimableIncome}
-              claimableIncomeStatus={claimableIncomeStatus}
-              claimMonthlyStatus={claimMonthlyStatus}
-              claimMonthlyConfirmationsRemaining={incomeConfirmationsRemaining}
-              onRefreshIncome={refetchClaimableIncome}
-              onClaimIncome={handleClaimMonthlyIncome}
-            />
+            {activePage === "ubi" ? (
+              <>
+                <BalanceCard
+                  balance={balance}
+                  isBalanceEncrypted={isBalanceEncrypted}
+                  balanceStatus={balanceStatus}
+                  onRefreshBalance={handleRefreshBalance}
+                  claimableIncome={claimableIncome}
+                  claimableIncomeStatus={claimableIncomeStatus}
+                  claimMonthlyStatus={claimMonthlyStatus}
+                  claimMonthlyConfirmationsRemaining={incomeConfirmationsRemaining}
+                  onRefreshIncome={refetchClaimableIncome}
+                  onClaimIncome={handleClaimMonthlyIncome}
+                />
 
-            <TvsCard
-              totalValueShielded={totalValueShielded}
-              tvsStatus={tvsStatus as any}
-              onRefreshTvs={refetchTotalValueShielded}
-            />
+                <TvsCard
+                  totalValueShielded={totalValueShielded}
+                  tvsStatus={tvsStatus as any}
+                  onRefreshTvs={refetchTotalValueShielded}
+                />
+              </>
+            ) : (
+              <>
+                <VaultInfoCard
+                  vaultStatus={vaultStatus}
+                  onRefreshVault={refreshVaultData}
+                  csbaBalance={csbaBalance}
+                  pendingCsbaAmount={pendingCsbaAmount}
+                  pendingSbaEstimate={pendingSbaEstimate}
+                  pendingActive={pendingActive}
+                  pendingUnlockBlock={pendingUnlockBlock}
+                  blocksUntilUnlock={blocksUntilUnlock}
+                  currentBlock={currentBlock}
+                  sharePriceScaled={sharePriceScaled}
+                  monthlyRateBps={monthlyRateBps}
+                  blocksPerMonth={blocksPerMonth}
+                />
+                <BalanceCard
+                  balance={balance}
+                  isBalanceEncrypted={isBalanceEncrypted}
+                  balanceStatus={balanceStatus}
+                  onRefreshBalance={handleRefreshBalance}
+                  claimableIncome={claimableIncome}
+                  claimableIncomeStatus={claimableIncomeStatus}
+                  claimMonthlyStatus={claimMonthlyStatus}
+                  claimMonthlyConfirmationsRemaining={incomeConfirmationsRemaining}
+                  onRefreshIncome={refetchClaimableIncome}
+                  onClaimIncome={handleClaimMonthlyIncome}
+                />
+              </>
+            )}
           </aside>
         </div>
       )}

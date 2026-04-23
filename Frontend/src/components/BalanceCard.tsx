@@ -9,6 +9,7 @@ interface BalanceCardProps {
   claimableIncome?: bigint;
   claimableIncomeStatus: Status;
   claimMonthlyStatus: Status;
+  claimMonthlyConfirmationsRemaining?: number | null;
   onRefreshIncome: () => void;
   onClaimIncome: () => void;
 }
@@ -21,6 +22,7 @@ export function BalanceCard({
   claimableIncome,
   claimableIncomeStatus,
   claimMonthlyStatus,
+  claimMonthlyConfirmationsRemaining,
   onRefreshIncome,
   onClaimIncome,
 }: BalanceCardProps) {
@@ -95,6 +97,13 @@ export function BalanceCard({
               <span className="muted">No income yet</span>
             )}
           </div>
+          {claimMonthlyStatus === "confirming" &&
+            claimMonthlyConfirmationsRemaining != null && (
+              <p className="status-warn status-center">
+                {claimMonthlyConfirmationsRemaining} block
+                {claimMonthlyConfirmationsRemaining === 1 ? "" : "s"} confirmations remaining
+              </p>
+            )}
         </div>
       </div>
     </section>

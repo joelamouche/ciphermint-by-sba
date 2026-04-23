@@ -5,3 +5,5 @@ export { BalanceCard } from "./BalanceCard";
 export { StatusCard } from "./StatusCard";
 export { StepperPanel } from "./StepperPanel";
 export { TvsCard } from "./TvsCard";
+export { VaultActionPanel } from "./VaultActionPanel";
+export { VaultInfoCard } from "./VaultInfoCard";

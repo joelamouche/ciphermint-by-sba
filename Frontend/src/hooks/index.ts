@@ -8,3 +8,5 @@ export { useStartKycSession } from "./useStartKycSession";
 export { useRefreshBalance } from "./useRefreshBalance";
 export { useRefreshMint } from "./useRefreshMint";
 export { useTransferTokens } from "./useTransferTokens";
+export { useVaultData } from "./useVaultData";
+export { useVaultActions } from "./useVaultActions";
