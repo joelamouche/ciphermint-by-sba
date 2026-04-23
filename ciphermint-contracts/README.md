@@ -1,6 +1,6 @@
 # CipherMint Smart Contracts
 
-Smart contracts for CipherMint - a confidential compliant ERC-20 token built on Zama FHEVM. This package contains the IdentityRegistry, ComplianceRules, and CompliantERC20 contracts that enable private token transfers between verified holders while maintaining compliance.
+Smart contracts for CipherMint, a confidential compliant token system built on Zama fhEVM. The package now includes the base compliant token (`CompliantERC20`), the UBI/policy token (`CompliantUBI`), and the central-bank-style vault share token (`CipherCentralBank`) in addition to identity/compliance registry components.
 
 ## Quick Start
 
@@ -76,14 +76,22 @@ Frontend env (Sepolia):
    npx hardhat test --network sepolia
    ```
 
+## Contract Highlights
+
+- `CompliantERC20`: encrypted balances/supply, branch-free compliance-gated transfers, encrypted allowances, and two-step ownership via `Ownable2Step`.
+- `CompliantUBI`: one-time claim (`100 SBA`), per-block linear UBI accrual (`10 SBA/month` target), and policy mint/burn controller flows with `centralBankController` inventory support.
+- `CipherCentralBank` (`CSBA`): deposit SBA for CSBA shares at a compounded share price, configurable monthly rate (`monthlyRateBps`), and two-step withdrawal with a one-month block lock before SBA payout.
+
 ## 📁 Project Structure
 
 ```
 ciphermint-contracts/
 ├── contracts/           # Smart contract source files
-│   ├── IdentityRegistry.sol  # Identity verification registry
+│   ├── IdentityRegistry.sol   # Identity verification registry
 │   ├── ComplianceRules.sol    # Compliance checking rules engine
-│   └── CompliantERC20.sol     # Confidential ERC-20 token contract
+│   ├── CompliantERC20.sol     # Base encrypted/compliant token primitive
+│   ├── CompliantUBI.sol       # SBA token with UBI + policy controls
+│   └── CipherCentralBank.sol  # CSBA vault-share token over SBA
 ├── deploy/              # Deployment scripts
 ├── test/                # Test files
 │   ├── IdentityRegistry.ts    # IdentityRegistry unit tests

@@ -1,10 +1,12 @@
 # CipherMint
 A Confidential RWA POC by Stevens Blockchain Advisory
 
-## MVP Summary — Phase 1
+## MVP Summary — Current State
 
-**Product:** Confidential compliant ERC-20 on Zama FHEVM
-**Goal:** Show a PoC where *any verified human (age >= 18) with a unique name can mint 100 tokens*, no name collisions, and confidential transfers only between verified holders.
+**Product:** Confidential compliant monetary stack on Zama fhEVM
+**Goal:** Deliver a PoC with encrypted compliant transfers plus a monetary layer composed of:
+- `SBA` (`CompliantUBI`) for compliant UBI issuance and policy operations.
+- `CSBA` (`CipherCentralBank`) vault shares priced against SBA with monthly compounding and delayed exit.
 
 **Key principles**
 
@@ -37,7 +39,9 @@ Backend (Node / server)
 Zama FHEVM (Sepolia)
         |
         |— IdentityRegistry
-        |— CompliantERC20
+|— CompliantERC20
+|— CompliantUBI (SBA)
+|— CipherCentralBank (CSBA)
 ```
 
 ---
@@ -173,20 +177,30 @@ sequenceDiagram
 
 ---
 
-## Smart Contract Rules — Phase 1
+## Smart Contract Rules — Implemented
 
-**CompliantERC20 MVP rules**
+**CompliantERC20 (base primitive)**
 
-* `mint(address to)`:
+* Encrypted balances, allowances, and total supply (`euint64`).
+* Branch-free transfer behavior: failed compliance or insufficient balance resolves to transfer amount `0` (no revert leak), while still emitting `Transfer`.
+* Optional compliance checker integration and two-step ownership (`Ownable2Step`).
 
-  * Only if `IdentityRegistry.isAttested(to)` == true
-  * Only if `IdentityRegistry.isAtLeastAge(to, 18)` == true (encrypted check)
-  * Only if name is unique (enforced on-chain via name hash)
-  * Only once per identity (or per address)
-* `transfer(from, to, amount)`:
+**CompliantUBI (`SBA`)**
 
-  * Only to addresses with `IdentityRegistry.isAttested(to)` == true
-* No PII on-chain — only encrypted birth year and hashed name (bytes32).
+* One-time claim: `100 SBA` for compliant users via encrypted checks.
+* Recurring UBI: per-block linear accrual targeting `10 SBA/month`, claimable via `claimMonthlyIncome`.
+* Monetary controller model:
+  * `mint(to, amount)` first sources liquidity from `centralBankController`, then mints shortfall.
+  * `burn(from, amount)` transfers to `centralBankController` (policy sink/source model).
+
+**CipherCentralBank (`CSBA`)**
+
+* Deposit flow: users deposit encrypted SBA and receive CSBA shares based on `sharePriceScaled`.
+* Yield model: `sharePriceScaled` compounds monthly according to `monthlyRateBps` (owner-configurable, capped at `10000` bps).
+* Exit flow (2-step):
+  * `requestWithdraw` locks CSBA for one full `BLOCKS_PER_MONTH`.
+  * `completeWithdraw` after unlock mints/pays SBA according to current share price.
+* Bank inventory path (`address(this)`) bypasses compliance gating only for custody/re-issuance transfers; regular peer transfers remain compliance-gated.
 
 ---
 
