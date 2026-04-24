@@ -33,6 +33,8 @@ interface AttestIdentityResult {
 // Singleton instance
 let fheInstance: any = null;
 let isInitialized = false;
+const ENCRYPT_MAX_ATTEMPTS = Number(process.env.ZAMA_ENCRYPT_MAX_ATTEMPTS ?? 3);
+const ENCRYPT_TIMEOUT_MS = Number(process.env.ZAMA_ENCRYPT_TIMEOUT_MS ?? 20000);
 
 /**
  * Initialize FHEVM instance for Node.js environment
@@ -96,6 +98,33 @@ async function getFheInstance(): Promise<any> {
   return fheInstance;
 }
 
+function resetFheInstance(): void {
+  fheInstance = null;
+  isInitialized = false;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  label: string
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 /**
  * Hash a full name to bytes32 (keccak256)
  */
@@ -156,21 +185,48 @@ async function encryptValue(
   address: string,
   value: number
 ): Promise<{ handles: string[]; inputProof: string }> {
-  const fhe = await getFheInstance();
+  let lastError: unknown = null;
 
-  // Create encrypted input buffer
-  const encrypted = fhe.createEncryptedInput(contractAddress, address);
+  for (let attempt = 1; attempt <= ENCRYPT_MAX_ATTEMPTS; attempt++) {
+    const attemptStartedAt = Date.now();
+    try {
+      const fhe = await getFheInstance();
+      const encrypted = fhe.createEncryptedInput(contractAddress, address);
+      encrypted.add8(BigInt(value));
 
-  // Add the value as uint8 (birth year offset is 0-255)
-  encrypted.add8(BigInt(value));
+      const encryptedInput = (await withTimeout(
+        encrypted.encrypt(),
+        ENCRYPT_TIMEOUT_MS,
+        "relayer encrypt"
+      )) as { handles: string[]; inputProof: string };
 
-  // Encrypt and get handles + proof
-  const encryptedInput = await encrypted.encrypt();
+      console.log(
+        `[attestIdentity] encryption_attempt_success attempt=${attempt} elapsed_ms=${
+          Date.now() - attemptStartedAt
+        }`
+      );
 
-  return {
-    handles: encryptedInput.handles,
-    inputProof: encryptedInput.inputProof,
-  };
+      return {
+        handles: encryptedInput.handles,
+        inputProof: encryptedInput.inputProof,
+      };
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[attestIdentity] encryption_attempt_failed attempt=${attempt}/${ENCRYPT_MAX_ATTEMPTS} message="${message}" elapsed_ms=${
+          Date.now() - attemptStartedAt
+        }`
+      );
+
+      if (attempt < ENCRYPT_MAX_ATTEMPTS) {
+        resetFheInstance();
+        await initializeZamaSDK();
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 /**
@@ -182,6 +238,7 @@ async function encryptValue(
 export async function attestIdentity(
   params: AttestIdentityParams
 ): Promise<AttestIdentityResult> {
+  const startedAt = Date.now();
   const contractAddress = process.env.ZAMA_IDENTITY_REGISTRY_ADDRESS;
   const registrarPrivateKey = process.env.ZAMA_REGISTRAR_PRIVATE_KEY;
 
@@ -200,10 +257,19 @@ export async function attestIdentity(
   }
 
   try {
+    console.log(
+      `[attestIdentity] start user=${params.userAddress} contract=${contractAddress}`
+    );
+
     // Setup ethers provider and signer for registrar checks
     const rpcUrl = process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org";
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const signer = new ethers.Wallet(registrarPrivateKey, provider);
+    console.log(
+      `[attestIdentity] signer_ready signer=${signer.address} elapsed_ms=${
+        Date.now() - startedAt
+      }`
+    );
 
     // Validate user address
     if (!ethers.isAddress(params.userAddress)) {
@@ -215,15 +281,30 @@ export async function attestIdentity(
 
     // Calculate birth year offset
     const birthYearOffset = calculateBirthYearOffset(params.birthYear);
+    console.log(
+      `[attestIdentity] birth_year_offset=${birthYearOffset} elapsed_ms=${
+        Date.now() - startedAt
+      }`
+    );
 
     // Hash the name
     const nameHash = hashName(params.fullName);
+    console.log(
+      `[attestIdentity] name_hashed elapsed_ms=${Date.now() - startedAt}`
+    );
 
     // Encrypt the birth year offset using FHEVM
+    const encryptionStartedAt = Date.now();
+    console.log("[attestIdentity] encryption_start");
     const encrypted = await encryptValue(
       contractAddress,
       signer.address, // Registrar address (who can import the encrypted value)
       birthYearOffset
+    );
+    console.log(
+      `[attestIdentity] encryption_done elapsed_ms=${
+        Date.now() - encryptionStartedAt
+      } total_elapsed_ms=${Date.now() - startedAt}`
     );
 
     // Get the contract instance using ethers directly
@@ -239,7 +320,14 @@ export async function attestIdentity(
     // The contract expects: attestIdentity(address user, externalEuint8 encBirthYearOffset, bytes32 nameHash, bytes calldata inputProof)
 
     // First, check if the signer is authorized as a registrar
+    const registrarCheckStartedAt = Date.now();
+    console.log("[attestIdentity] registrar_check_start");
     const isRegistrar = await contract.registrars(signer.address);
+    console.log(
+      `[attestIdentity] registrar_check_done is_registrar=${isRegistrar} elapsed_ms=${
+        Date.now() - registrarCheckStartedAt
+      } total_elapsed_ms=${Date.now() - startedAt}`
+    );
     if (!isRegistrar) {
       return {
         success: false,
@@ -251,6 +339,8 @@ export async function attestIdentity(
       // Call attestIdentity with the encrypted handle and proof
       // Similar to the test file: contract.attestIdentity(userAddress, encryptedInput.handles[0], nameHash, encryptedInput.inputProof)
       // Skip gas estimation by providing a gas limit directly
+      const txSendStartedAt = Date.now();
+      console.log("[attestIdentity] tx_send_start");
       const tx = await contract.attestIdentity(
         params.userAddress, // user parameter (address)
         encrypted.handles[0], // externalEuint8 (bytes32 handle)
@@ -260,9 +350,23 @@ export async function attestIdentity(
         //   gasLimit: 500000, // Set gas limit to skip estimation (FHE operations can be gas-intensive)
         // }
       );
+      console.log(
+        `[attestIdentity] tx_sent hash=${tx.hash} elapsed_ms=${
+          Date.now() - txSendStartedAt
+        } total_elapsed_ms=${Date.now() - startedAt}`
+      );
 
       // Wait for transaction confirmation
+      const txWaitStartedAt = Date.now();
+      console.log(`[attestIdentity] tx_wait_start hash=${tx.hash}`);
       const receipt = await tx.wait();
+      console.log(
+        `[attestIdentity] tx_confirmed hash=${receipt.hash} block=${
+          receipt.blockNumber
+        } elapsed_ms=${Date.now() - txWaitStartedAt} total_elapsed_ms=${
+          Date.now() - startedAt
+        }`
+      );
 
       return {
         success: true,
@@ -289,6 +393,7 @@ export async function attestIdentity(
         nameHash,
         hasEncryptedHandle: !!encrypted.handles[0],
         hasInputProof: !!encrypted.inputProof,
+        elapsedMs: Date.now() - startedAt,
       });
 
       return {
@@ -297,7 +402,10 @@ export async function attestIdentity(
       };
     }
   } catch (error) {
-    console.error("Error attesting identity:", error);
+    console.error("Error attesting identity:", {
+      error,
+      elapsedMs: Date.now() - startedAt,
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),

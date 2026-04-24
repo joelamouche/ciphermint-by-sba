@@ -5,6 +5,9 @@ import { createDiditSession, verifyDiditSimpleSignature } from "../lib/didit";
 import { attestIdentity, initializeZamaSDK } from "../lib/zama";
 
 const router = Router();
+const attestationTimers = new Map<string, NodeJS.Timeout>();
+const MAX_ATTESTATION_RETRIES = 5;
+const BASE_RETRY_DELAY_MS = 5_000;
 
 // Helper to validate Ethereum address
 function isValidAddress(address: string): boolean {
@@ -14,6 +17,135 @@ function isValidAddress(address: string): boolean {
 // Helper to sanitize strings (remove control characters)
 function sanitizeString(str: string): string {
   return str.replace(/[\x00-\x1F\x7F]/g, "");
+}
+
+function isRetryableAttestationError(error: string): boolean {
+  const normalized = error.toLowerCase();
+  return (
+    normalized.includes("503") ||
+    normalized.includes("timeout") ||
+    normalized.includes("ring-balancer") ||
+    normalized.includes("relayer") ||
+    normalized.includes("input-proof") ||
+    normalized.includes("network")
+  );
+}
+
+function computeRetryDelayMs(attempt: number): number {
+  const exponentialBackoff = BASE_RETRY_DELAY_MS * 2 ** (attempt - 1);
+  const jitter = Math.floor(Math.random() * 1500);
+  return exponentialBackoff + jitter;
+}
+
+function scheduleAttestationJob(params: {
+  kycSessionId: string;
+  diditSessionId: string;
+  walletAddress: string;
+  birthYear: number;
+  extractedName: string;
+  attempt: number;
+}): void {
+  const { kycSessionId, diditSessionId, walletAddress, birthYear, extractedName } =
+    params;
+  const attempt = Math.max(1, params.attempt);
+
+  const existingTimer = attestationTimers.get(kycSessionId);
+  if (existingTimer && attempt === 1) {
+    return;
+  }
+
+  const delayMs = attempt === 1 ? 0 : computeRetryDelayMs(attempt - 1);
+  const timer = setTimeout(async () => {
+    attestationTimers.delete(kycSessionId);
+
+    // Skip work when status is already terminal.
+    const session = await prisma.kycSession.findUnique({
+      where: { id: kycSessionId },
+      select: { status: true },
+    });
+    if (!session || !["CREATED", "IN_PROGRESS"].includes(session.status)) {
+      return;
+    }
+
+    const contractAddress = process.env.ZAMA_IDENTITY_REGISTRY_ADDRESS;
+    if (!contractAddress) {
+      console.warn(
+        "ZAMA_IDENTITY_REGISTRY_ADDRESS not configured, marking session VERIFIED without attestation"
+      );
+      await prisma.kycSession.update({
+        where: { id: kycSessionId },
+        data: { status: "VERIFIED" },
+      });
+      return;
+    }
+
+    try {
+      await initializeZamaSDK();
+
+      const attestResult = await attestIdentity({
+        userAddress: walletAddress,
+        birthYear,
+        fullName: extractedName,
+      });
+
+      if (!attestResult.success) {
+        const errorMessage = attestResult.error ?? "Unknown attestation error";
+        if (
+          attempt < MAX_ATTESTATION_RETRIES &&
+          isRetryableAttestationError(errorMessage)
+        ) {
+          console.warn(
+            `Retryable attestation error for session_id=${diditSessionId} (attempt ${attempt}/${MAX_ATTESTATION_RETRIES}): ${errorMessage}`
+          );
+          scheduleAttestationJob({
+            ...params,
+            attempt: attempt + 1,
+          });
+          return;
+        }
+
+        console.error(
+          `Failed to attest identity for session_id=${diditSessionId} after ${attempt} attempts: ${errorMessage}`
+        );
+        await prisma.kycSession.update({
+          where: { id: kycSessionId },
+          data: { status: "FAILED" },
+        });
+        return;
+      }
+
+      await prisma.kycSession.update({
+        where: { id: kycSessionId },
+        data: { status: "VERIFIED" },
+      });
+      console.log(
+        `Identity attested on-chain for session_id=${diditSessionId}, tx=${attestResult.transactionHash}`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < MAX_ATTESTATION_RETRIES && isRetryableAttestationError(message)) {
+        console.warn(
+          `Retryable attestation exception for session_id=${diditSessionId} (attempt ${attempt}/${MAX_ATTESTATION_RETRIES}): ${message}`
+        );
+        scheduleAttestationJob({
+          ...params,
+          attempt: attempt + 1,
+        });
+        return;
+      }
+
+      console.error(
+        `Attestation job failed for session_id=${diditSessionId} after ${attempt} attempts:`,
+        error
+      );
+      await prisma.kycSession.update({
+        where: { id: kycSessionId },
+        data: { status: "FAILED" },
+      });
+    }
+  }, delayMs);
+
+  attestationTimers.set(kycSessionId, timer);
 }
 
 /**
@@ -263,74 +395,23 @@ router.post("/webhook", async (req: Request, res: Response) => {
       return res.status(200).json({ ok: true });
     }
 
-    //TODO: Implement this => but this would mean exposing nameHashToAddress so not ideal for now
-    // Check name uniqueness on-chain (optional - contract will also check)
-    // const nameHash = hashName(extractedName);
-    const contractAddress = process.env.ZAMA_IDENTITY_REGISTRY_ADDRESS;
-    // if (contractAddress) {
-    //   const nameTaken = await isNameTaken(contractAddress, nameHash);
-    //   if (nameTaken) {
-    //     console.warn(
-    //       `Name "${extractedName}" already taken for session_id=${sessionId}, marking as FAILED`
-    //     );
-    //     await prisma.kycSession.update({
-    //       where: { id: kycSession.id },
-    //       data: { status: "FAILED" },
-    //     });
-    //     return res.status(200).json({ ok: true });
-    //   }
-    // }
-
-    // console.log("extractedName", extractedName);
-
-    // Write identity to Zama IdentityRegistry on-chain
-    if (contractAddress) {
-      // Initialize Zama SDK if needed (idempotent)
-      try {
-        await initializeZamaSDK();
-      } catch (error) {
-        console.error("Failed to initialize Zama SDK:", error);
-        await prisma.kycSession.update({
-          where: { id: kycSession.id },
-          data: { status: "FAILED" },
-        });
-        return res.status(200).json({ ok: true });
-      }
-
-      const attestResult = await attestIdentity({
-        userAddress: kycSession.walletAddress,
-        birthYear,
-        fullName: extractedName,
-      });
-
-      if (!attestResult.success) {
-        console.error(
-          `Failed to attest identity for session_id=${sessionId}: ${attestResult.error}`
-        );
-        await prisma.kycSession.update({
-          where: { id: kycSession.id },
-          data: { status: "FAILED" },
-        });
-        return res.status(200).json({ ok: true });
-      }
-
-      console.log(
-        `Identity attested on-chain for session_id=${sessionId}, tx=${attestResult.transactionHash}`
-      );
-    } else {
-      console.warn(
-        "ZAMA_IDENTITY_REGISTRY_ADDRESS not configured, skipping on-chain attestation"
-      );
-    }
-
-    // Mark session as VERIFIED
+    // Mark session in-progress and process on-chain attestation asynchronously.
     await prisma.kycSession.update({
       where: { id: kycSession.id },
-      data: { status: "VERIFIED" },
+      data: { status: "IN_PROGRESS" },
+    });
+
+    scheduleAttestationJob({
+      kycSessionId: kycSession.id,
+      diditSessionId: sessionId,
+      walletAddress: kycSession.walletAddress,
+      birthYear,
+      extractedName,
+      attempt: 1,
     });
 
     console.log(
-      `Didit webhook processed for session_id=${sessionId}, status=${status}, extracted_name="${extractedName}", birth_year=${birthYear}`
+      `Didit webhook accepted for async attestation session_id=${sessionId}, status=${status}, extracted_name="${extractedName}", birth_year=${birthYear}`
     );
 
     return res.status(200).json({ ok: true });
