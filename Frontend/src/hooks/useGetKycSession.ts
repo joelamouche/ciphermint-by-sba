@@ -2,7 +2,19 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { API_BASE_URL } from "../config";
 
-type KycSessionStatus = "created" | "in_progress" | "done";
+type KycSessionStatus =
+  | "created"
+  | "didit_in_progress"
+  | "attesting"
+  | "degraded"
+  | "done";
+
+interface KycSessionState {
+  status: KycSessionStatus;
+  relayerDegraded: boolean;
+  attestationAttempts: number;
+  lastError: string | null;
+}
 
 interface UseGetKycSessionParams {
   sessionId: string | null;
@@ -25,21 +37,34 @@ export function useGetKycSession({
       if (!response.ok) {
         throw new Error("Failed to fetch KYC session status.");
       }
-      const body = (await response.json()) as { status?: string };
-      return (body.status as KycSessionStatus | undefined) ?? "created";
+      const body = (await response.json()) as {
+        status?: string;
+        relayerDegraded?: boolean;
+        attestationAttempts?: number;
+        lastError?: string | null;
+      };
+      return {
+        status: (body.status as KycSessionStatus | undefined) ?? "created",
+        relayerDegraded: Boolean(body.relayerDegraded),
+        attestationAttempts: body.attestationAttempts ?? 0,
+        lastError: body.lastError ?? null,
+      } satisfies KycSessionState;
     },
     refetchInterval: (queryState) =>
-      queryState.state.data === "done" ? false : 5000,
+      queryState.state.data?.status === "done" ? false : 5000,
   });
 
   useEffect(() => {
-    if (query.data === "done") {
+    if (query.data?.status === "done") {
       onDone?.();
     }
-  }, [query.data, onDone]);
+  }, [query.data?.status, onDone]);
 
   return {
-    status: query.data ?? null,
-    isPolling: Boolean(sessionId && enabled && query.data !== "done"),
+    status: query.data?.status ?? null,
+    relayerDegraded: query.data?.relayerDegraded ?? false,
+    attestationAttempts: query.data?.attestationAttempts ?? 0,
+    lastError: query.data?.lastError ?? null,
+    isPolling: Boolean(sessionId && enabled && query.data?.status !== "done"),
   };
 }

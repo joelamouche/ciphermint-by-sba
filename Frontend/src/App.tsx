@@ -165,7 +165,12 @@ export default function App() {
     onError: (message) => setError(message),
   });
 
-  const { status: kycSessionStatus } = useGetKycSession({
+  const {
+    status: kycSessionStatus,
+    relayerDegraded: kycRelayerDegraded,
+    attestationAttempts: kycAttestationAttempts,
+    lastError: kycLastError,
+  } = useGetKycSession({
     sessionId,
     enabled: kycPollingEnabled,
     onDone: () => {
@@ -437,6 +442,9 @@ export default function App() {
                   userAddress={address}
                   sessionUrl={sessionUrl}
                   kycSessionStatus={kycSessionStatus}
+                  kycRelayerDegraded={kycRelayerDegraded}
+                  kycAttestationAttempts={kycAttestationAttempts}
+                  kycLastError={kycLastError}
                   kycStatus={kycStatus}
                   canClaim={canClaim}
                   claimStatus={claimStatus}

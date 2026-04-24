@@ -63,7 +63,7 @@ function scheduleAttestationJob(params: {
       where: { id: kycSessionId },
       select: { status: true },
     });
-    if (!session || !["CREATED", "IN_PROGRESS"].includes(session.status)) {
+    if (!session || !["ATTESTING", "RELAYER_DEGRADED"].includes(session.status)) {
       return;
     }
 
@@ -74,7 +74,11 @@ function scheduleAttestationJob(params: {
       );
       await prisma.kycSession.update({
         where: { id: kycSessionId },
-        data: { status: "VERIFIED" },
+        data: {
+          status: "VERIFIED",
+          relayerDegraded: false,
+          lastError: null,
+        },
       });
       return;
     }
@@ -94,6 +98,15 @@ function scheduleAttestationJob(params: {
           attempt < MAX_ATTESTATION_RETRIES &&
           isRetryableAttestationError(errorMessage)
         ) {
+          await prisma.kycSession.update({
+            where: { id: kycSessionId },
+            data: {
+              status: "RELAYER_DEGRADED",
+              relayerDegraded: true,
+              lastError: errorMessage,
+              attestationAttempts: attempt,
+            },
+          });
           console.warn(
             `Retryable attestation error for session_id=${diditSessionId} (attempt ${attempt}/${MAX_ATTESTATION_RETRIES}): ${errorMessage}`
           );
@@ -109,14 +122,24 @@ function scheduleAttestationJob(params: {
         );
         await prisma.kycSession.update({
           where: { id: kycSessionId },
-          data: { status: "FAILED" },
+          data: {
+            status: "FAILED",
+            relayerDegraded: false,
+            lastError: errorMessage,
+            attestationAttempts: attempt,
+          },
         });
         return;
       }
 
       await prisma.kycSession.update({
         where: { id: kycSessionId },
-        data: { status: "VERIFIED" },
+        data: {
+          status: "VERIFIED",
+          relayerDegraded: false,
+          lastError: null,
+          attestationAttempts: attempt,
+        },
       });
       console.log(
         `Identity attested on-chain for session_id=${diditSessionId}, tx=${attestResult.transactionHash}`
@@ -124,6 +147,15 @@ function scheduleAttestationJob(params: {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (attempt < MAX_ATTESTATION_RETRIES && isRetryableAttestationError(message)) {
+        await prisma.kycSession.update({
+          where: { id: kycSessionId },
+          data: {
+            status: "RELAYER_DEGRADED",
+            relayerDegraded: true,
+            lastError: message,
+            attestationAttempts: attempt,
+          },
+        });
         console.warn(
           `Retryable attestation exception for session_id=${diditSessionId} (attempt ${attempt}/${MAX_ATTESTATION_RETRIES}): ${message}`
         );
@@ -140,7 +172,12 @@ function scheduleAttestationJob(params: {
       );
       await prisma.kycSession.update({
         where: { id: kycSessionId },
-        data: { status: "FAILED" },
+        data: {
+          status: "FAILED",
+          relayerDegraded: false,
+          lastError: message,
+          attestationAttempts: attempt,
+        },
       });
     }
   }, delayMs);
@@ -212,6 +249,9 @@ router.post("/session", async (req: Request, res: Response) => {
         walletAddress: walletAddress.toLowerCase(),
         diditSessionId: diditSession.sessionId,
         status: "CREATED",
+        relayerDegraded: false,
+        attestationAttempts: 0,
+        lastError: null,
       },
     });
 
@@ -310,7 +350,11 @@ router.post("/webhook", async (req: Request, res: Response) => {
       if (kycSession.status !== "IN_PROGRESS") {
         await prisma.kycSession.update({
           where: { id: kycSession.id },
-          data: { status: "IN_PROGRESS" },
+          data: {
+            status: "DIDIT_IN_PROGRESS",
+            relayerDegraded: false,
+            lastError: null,
+          },
         });
       }
       return res.status(200).json({ ok: true });
@@ -320,7 +364,10 @@ router.post("/webhook", async (req: Request, res: Response) => {
     if (normalizedStatus === "failed") {
       await prisma.kycSession.update({
         where: { id: kycSession.id },
-        data: { status: "FAILED" },
+        data: {
+          status: "FAILED",
+          relayerDegraded: false,
+        },
       });
       return res.status(200).json({ ok: true });
     }
@@ -365,7 +412,10 @@ router.post("/webhook", async (req: Request, res: Response) => {
     if (!extractedName || extractedName.length > 128) {
       await prisma.kycSession.update({
         where: { id: kycSession.id },
-        data: { status: "FAILED" },
+        data: {
+          status: "FAILED",
+          relayerDegraded: false,
+        },
       });
       console.warn(
         `Invalid or missing extracted_name for session_id=${sessionId}, marking as FAILED. Name: "${extractedName}"`
@@ -390,7 +440,10 @@ router.post("/webhook", async (req: Request, res: Response) => {
       );
       await prisma.kycSession.update({
         where: { id: kycSession.id },
-        data: { status: "FAILED" },
+        data: {
+          status: "FAILED",
+          relayerDegraded: false,
+        },
       });
       return res.status(200).json({ ok: true });
     }
@@ -398,7 +451,12 @@ router.post("/webhook", async (req: Request, res: Response) => {
     // Mark session in-progress and process on-chain attestation asynchronously.
     await prisma.kycSession.update({
       where: { id: kycSession.id },
-      data: { status: "IN_PROGRESS" },
+      data: {
+        status: "ATTESTING",
+        relayerDegraded: false,
+        attestationAttempts: 0,
+        lastError: null,
+      },
     });
 
     scheduleAttestationJob({
@@ -437,7 +495,12 @@ router.get("/session/:id/status", async (req: Request, res: Response) => {
 
     const kycSession = await prisma.kycSession.findUnique({
       where: { id: idParam },
-      select: { status: true },
+      select: {
+        status: true,
+        relayerDegraded: true,
+        attestationAttempts: true,
+        lastError: true,
+      },
     });
 
     if (!kycSession) {
@@ -445,11 +508,22 @@ router.get("/session/:id/status", async (req: Request, res: Response) => {
     }
 
     const status =
-      kycSession.status === "FAILED" || kycSession.status === "VERIFIED"
+      kycSession.status === "VERIFIED" || kycSession.status === "FAILED"
         ? "done"
-        : kycSession.status.toLowerCase();
+        : kycSession.status === "DIDIT_IN_PROGRESS"
+          ? "didit_in_progress"
+          : kycSession.status === "ATTESTING"
+            ? "attesting"
+            : kycSession.status === "RELAYER_DEGRADED"
+              ? "degraded"
+              : "created";
 
-    return res.json({ status });
+    return res.json({
+      status,
+      relayerDegraded: kycSession.relayerDegraded,
+      attestationAttempts: kycSession.attestationAttempts,
+      lastError: kycSession.lastError,
+    });
   } catch (error) {
     console.error("Error fetching KYC session status:", error);
     return res.status(500).json({ error: "Internal server error" });

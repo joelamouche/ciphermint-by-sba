@@ -8,7 +8,16 @@ interface ActionPanelProps {
   isConnected: boolean;
   userAddress?: string;
   sessionUrl: string | null;
-  kycSessionStatus: "created" | "in_progress" | "done" | null;
+  kycSessionStatus:
+    | "created"
+    | "didit_in_progress"
+    | "attesting"
+    | "degraded"
+    | "done"
+    | null;
+  kycRelayerDegraded: boolean;
+  kycAttestationAttempts: number;
+  kycLastError: string | null;
   kycStatus: Status;
   canClaim: boolean;
   claimStatus: Status;
@@ -31,6 +40,9 @@ export function ActionPanel({
   userAddress,
   sessionUrl,
   kycSessionStatus,
+  kycRelayerDegraded,
+  kycAttestationAttempts,
+  kycLastError,
   kycStatus,
   canClaim,
   claimStatus,
@@ -73,20 +85,38 @@ export function ActionPanel({
             writes your identity on-chain.
           </p>
           {sessionUrl ? (
-            <button
-              type="button"
-              onClick={onOpenKyc}
-              disabled={
-                kycSessionStatus === "in_progress" ||
-                kycSessionStatus === "done"
-              }
-            >
-              {kycSessionStatus === "in_progress"
-                ? "Verification in progress"
-                : kycSessionStatus === "done"
-                  ? "Verification complete"
-                  : "Open Didit verification"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onOpenKyc}
+                disabled={
+                  kycSessionStatus === "didit_in_progress" ||
+                  kycSessionStatus === "attesting" ||
+                  kycSessionStatus === "done"
+                }
+              >
+                {kycSessionStatus === "didit_in_progress"
+                  ? "Didit verification in progress"
+                  : kycSessionStatus === "attesting"
+                    ? "Writing attestation on-chain"
+                  : kycSessionStatus === "degraded"
+                    ? "Relayer degraded - retry verification"
+                  : kycSessionStatus === "done"
+                    ? "Verification complete"
+                    : "Open Didit verification"}
+              </button>
+              {kycSessionStatus === "degraded" && (
+                <p className="status-warn status-center">
+                  Network degraded. Retries attempted: {kycAttestationAttempts}
+                  {kycRelayerDegraded ? " (relayer reported degraded)" : ""}
+                </p>
+              )}
+              {kycSessionStatus === "degraded" && kycLastError && (
+                <p className="muted status-center">
+                  Last error: {kycLastError}
+                </p>
+              )}
+            </>
           ) : (
             <button
               type="button"

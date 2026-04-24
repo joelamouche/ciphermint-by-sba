@@ -25,7 +25,10 @@ model KycSession {
   id             String   @id @default(uuid())
   walletAddress  String
   diditSessionId String   @unique
-  status         String   // CREATED / VERIFIED / FAILED
+  status         String   // CREATED / DIDIT_IN_PROGRESS / ATTESTING / RELAYER_DEGRADED / VERIFIED / FAILED
+  attestationAttempts Int @default(0)
+  relayerDegraded Boolean @default(false)
+  lastError      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
