@@ -299,6 +299,11 @@ router.post("/webhook", async (req: Request, res: Response) => {
     const sessionId = body.session_id ?? null;
     const status = body.status ?? null;
     const webhookType = body.webhook_type ?? null;
+    const vendorData = body.vendor_data ?? null;
+
+    console.log(
+      `[diditWebhook] received session_id=${sessionId ?? "null"} status=${status ?? "null"} webhook_type=${webhookType ?? "null"} vendor_data=${vendorData ?? "null"}`
+    );
 
     const isValid = verifyDiditSimpleSignature({
       signature,
@@ -329,13 +334,20 @@ router.post("/webhook", async (req: Request, res: Response) => {
     // If session not found, return 200 to avoid endless retries, but log it
     if (!kycSession) {
       console.warn(
-        `Received Didit webhook for unknown session_id=${sessionId}, status=${status}`
+        `[diditWebhook] unknown didit_session_id=${sessionId}, status=${status}, vendor_data=${vendorData ?? "null"}`
       );
       return res.status(200).json({ ok: true });
     }
 
-    // Idempotency: if already terminal, do nothing
-    if (!["CREATED", "IN_PROGRESS"].includes(kycSession.status)) {
+    console.log(
+      `[diditWebhook] matched didit_session_id=${sessionId} -> kyc_session_id=${kycSession.id} current_status=${kycSession.status}`
+    );
+
+    // Idempotency: only process callbacks while session is still pending.
+    if (!["CREATED", "DIDIT_IN_PROGRESS"].includes(kycSession.status)) {
+      console.log(
+        `[diditWebhook] ignoring non-pending session kyc_session_id=${kycSession.id} current_status=${kycSession.status}`
+      );
       return res.status(200).json({ ok: true });
     }
 
@@ -347,7 +359,7 @@ router.post("/webhook", async (req: Request, res: Response) => {
       normalizedStatus === "in_progress" ||
       normalizedStatus === "in-progress"
     ) {
-      if (kycSession.status !== "IN_PROGRESS") {
+      if (kycSession.status !== "DIDIT_IN_PROGRESS") {
         await prisma.kycSession.update({
           where: { id: kycSession.id },
           data: {
