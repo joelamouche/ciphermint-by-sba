@@ -18,6 +18,7 @@ contracts/typechain-types/
 
 # Env & local config
 .env
+.env.deploy
 .env.*
 !.env.example
 
