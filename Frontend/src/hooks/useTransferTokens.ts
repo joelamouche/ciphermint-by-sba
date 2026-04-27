@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { usePublicClient, useWriteContract } from "wagmi";
 import { isAddress, isHex, toHex, type Address, type Hex } from "viem";
 import type { Status } from "../App";
+import { TX_CONFIRMATIONS_REQUIRED } from "../config";
 import { encryptUint64 } from "../lib/fhevm";
 import { parseTokenAmount } from "../lib/tokenFormat";
 
@@ -29,7 +30,7 @@ export function useTransferTokens({
   const [confirmationsRemaining, setConfirmationsRemaining] = useState<
     number | null
   >(null);
-  const REQUIRED_CONFIRMATIONS = 6;
+  const REQUIRED_CONFIRMATIONS = TX_CONFIRMATIONS_REQUIRED;
   const normalizeHex = (value: unknown): Hex | null => {
     if (typeof value === "string") {
       return isHex(value) ? (value as Hex) : null;

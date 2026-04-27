@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { usePublicClient, useWriteContract } from "wagmi";
 import type { Status } from "../App";
+import { TX_CONFIRMATIONS_REQUIRED } from "../config";
 
 interface UseClaimMonthlyIncomeParams {
   tokenAddress?: `0x${string}`;
@@ -23,7 +24,7 @@ export function useClaimMonthlyIncome({
     number | null
   >(null);
 
-  const REQUIRED_CONFIRMATIONS = 6;
+  const REQUIRED_CONFIRMATIONS = TX_CONFIRMATIONS_REQUIRED;
   const mutation = useMutation({
     mutationFn: async (): Promise<`0x${string}`> => {
       if (!tokenAddress) {
