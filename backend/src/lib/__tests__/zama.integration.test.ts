@@ -9,11 +9,11 @@
  *    - INTEGRATION_TESTS_ENABLED=true
  *    - ZAMA_IDENTITY_REGISTRY_ADDRESS (deployed contract address)
  *    - ZAMA_REGISTRAR_PRIVATE_KEY (private key of registrar/deployer)
- *    - ZAMA_RPC_URL (optional, defaults to Sepolia)
+ *    - SEPOLIA_RPC_URL (optional, defaults to Sepolia)
  *
  * 2. Run: npm run test:integration
  *
- * Note: These tests will make real transactions on the network specified by ZAMA_RPC_URL.
+ * Note: These tests will make real transactions on the network specified by SEPOLIA_RPC_URL.
  * Make sure you're using a test network and have test funds available.
  */
 
@@ -76,7 +76,7 @@ describeIf(
             "  INTEGRATION_TESTS_ENABLED=true\n" +
             "  ZAMA_IDENTITY_REGISTRY_ADDRESS=0x...\n" +
             "  ZAMA_REGISTRAR_PRIVATE_KEY=0x...\n" +
-            "  ZAMA_RPC_URL=https://rpc.sepolia.org (optional)\n" +
+            "  SEPOLIA_RPC_URL=https://rpc.sepolia.org (optional)\n" +
             "  TEST_USER_ADDRESS=0x... (optional, defaults to 0x0000...0001)\n"
         );
       } else {
@@ -131,7 +131,7 @@ describeIf(
             throw new Error("ZAMA_REGISTRAR_PRIVATE_KEY not configured");
           }
 
-          const rpcUrl = process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org";
+          const rpcUrl = process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org";
           const provider = new ethers.JsonRpcProvider(rpcUrl);
           const signer = new ethers.Wallet(registrarPrivateKey, provider);
           const signerAddress = signer.address;

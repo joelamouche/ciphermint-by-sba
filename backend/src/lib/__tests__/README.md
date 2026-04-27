@@ -27,12 +27,12 @@ Integration tests make real blockchain calls and require:
    INTEGRATION_TESTS_ENABLED=true
    ZAMA_IDENTITY_REGISTRY_ADDRESS=0x... # Deployed IdentityRegistry contract
    ZAMA_REGISTRAR_PRIVATE_KEY=0x...      # Private key of registrar/deployer
-   ZAMA_RPC_URL=https://rpc.sepolia.org # Optional, defaults to Sepolia
+   SEPOLIA_RPC_URL=https://rpc.sepolia.org # Optional, defaults to Sepolia
    TEST_USER_ADDRESS=0x...               # Optional, defaults to 0x0000...0001
    ```
 
 2. **Network Requirements**:
-   - The contract must be deployed on the network specified by `ZAMA_RPC_URL`
+   - The contract must be deployed on the network specified by `SEPOLIA_RPC_URL`
    - The registrar private key must have permissions to call `attestIdentity`
    - The registrar account must have test funds for gas fees
 

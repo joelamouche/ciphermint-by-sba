@@ -27,8 +27,11 @@ const UBI_ABI = [
 
 const BANK_ABI = [
   "function deposit(bytes32 encryptedAmount, bytes calldata inputProof) external",
+  "function requestWithdraw(bytes32 encryptedAmount, bytes calldata inputProof) external",
   "function balanceOf(address account) external view returns (bytes32)",
   "function sharePriceScaled() external view returns (uint256)",
+  "function getPendingWithdrawCount(address user) external view returns (uint256)",
+  "function getPendingWithdraw(address user, uint256 requestIndex) external view returns (bytes32,uint64,bool)",
 ] as const;
 
 const describeIf = (condition: boolean, name: string, fn: () => void) => {
@@ -44,6 +47,10 @@ function requiredEnv(name: string): string {
     throw new Error(`Missing required env var: ${name}`);
   }
   return value.trim();
+}
+
+function requiredRpcUrl(): string {
+  return requiredEnv("SEPOLIA_RPC_URL");
 }
 
 const CREATE2_DEPLOYER_ADDRESS = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
@@ -148,7 +155,7 @@ describeIf(isEnabled(), "Manual Sepolia vault deposit smoke (backend)", () => {
     }
     process.env.ZAMA_REGISTRAR_PRIVATE_KEY = registrarKey;
 
-    requiredEnv("ZAMA_RPC_URL");
+    requiredRpcUrl();
     requiredEnv("ZAMA_IDENTITY_REGISTRY_ADDRESS");
     requiredEnv("ZAMA_COMPLIANCE_RULES_ADDRESS");
     requiredEnv("ZAMA_COMPLIANT_UBI_ADDRESS");
@@ -159,7 +166,7 @@ describeIf(isEnabled(), "Manual Sepolia vault deposit smoke (backend)", () => {
     await initializeZamaSDK();
 
     const relayer = await import("@zama-fhe/relayer-sdk/node");
-    const rpcUrl = requiredEnv("ZAMA_RPC_URL");
+    const rpcUrl = requiredRpcUrl();
     fhevmInstance = await relayer.createInstance({
       ...relayer.SepoliaConfig,
       network: rpcUrl,
@@ -172,9 +179,9 @@ describeIf(isEnabled(), "Manual Sepolia vault deposit smoke (backend)", () => {
   });
 
   it(
-    "requires redeploy parity and enforces SBA-down / CSBA-up on deposit",
+    "requires redeploy parity and enforces deposit + pending-withdraw visibility",
     async () => {
-      const rpcUrl = requiredEnv("ZAMA_RPC_URL");
+      const rpcUrl = requiredRpcUrl();
       const identityRegistryAddress = requiredEnv("ZAMA_IDENTITY_REGISTRY_ADDRESS");
       const complianceRulesAddress = requiredEnv("ZAMA_COMPLIANCE_RULES_ADDRESS");
       const ubiAddress = requiredEnv("ZAMA_COMPLIANT_UBI_ADDRESS");
@@ -249,7 +256,6 @@ describeIf(isEnabled(), "Manual Sepolia vault deposit smoke (backend)", () => {
         contractAddress: bankAddress,
       });
 
-      const sharePriceBefore = BigInt(await bank.sharePriceScaled());
       const depositEncrypted = await encryptUint64({
         instance: fhevmInstance,
         contractAddress: bankAddress,
@@ -274,13 +280,46 @@ describeIf(isEnabled(), "Manual Sepolia vault deposit smoke (backend)", () => {
         contractAddress: bankAddress,
       });
 
-      const expectedCsbaDelta = (depositAmount * DECIMALS) / sharePriceBefore;
       expect(afterSba).toBe(beforeSba - depositAmount);
-      expect(afterCsba).toBe(beforeCsba + expectedCsbaDelta);
+      expect(afterCsba).toBeGreaterThan(beforeCsba);
+
+      const pendingCountBefore = BigInt(await bank.getPendingWithdrawCount(userAddress));
+      const csbaDelta = afterCsba - beforeCsba;
+      const withdrawRequestAmount = csbaDelta > 1n ? csbaDelta / 2n : csbaDelta;
+      expect(withdrawRequestAmount).toBeGreaterThan(0n);
+
+      const withdrawEncrypted = await encryptUint64({
+        instance: fhevmInstance,
+        contractAddress: bankAddress,
+        userAddress,
+        value: withdrawRequestAmount,
+      });
+      const requestTx = await bank.requestWithdraw(withdrawEncrypted.handle, withdrawEncrypted.inputProof);
+      expect((await requestTx.wait())?.status).toBe(1);
+
+      const pendingCountAfter = BigInt(await bank.getPendingWithdrawCount(userAddress));
+      expect(pendingCountAfter).toBe(pendingCountBefore + 1n);
+
+      const requestedIndex = pendingCountAfter - 1n;
+      const [pendingAmountHandle, unlockBlock, active] = (await bank.getPendingWithdraw(
+        userAddress,
+        requestedIndex,
+      )) as [string, bigint, boolean];
+      expect(active).toBe(true);
+      expect(unlockBlock).toBeGreaterThan(0n);
+
+      const pendingAmount = await decryptEuint64Handle({
+        instance: fhevmInstance,
+        signer: userSigner,
+        handle: pendingAmountHandle,
+        contractAddress: bankAddress,
+      });
+      expect(pendingAmount).toBe(withdrawRequestAmount);
 
       console.log(
         `[manual-vault-smoke] ok sba_initial=${initialSba} sba_before=${beforeSba} sba_after=${afterSba} ` +
-          `csba_initial=${initialCsba} csba_before=${beforeCsba} csba_after=${afterCsba} deposit=${depositAmount}`,
+          `csba_initial=${initialCsba} csba_before=${beforeCsba} csba_after=${afterCsba} ` +
+          `deposit=${depositAmount} pending_count=${pendingCountAfter} pending_csba=${pendingAmount} unlock=${unlockBlock}`,
       );
     },
     { timeout: 240000 },

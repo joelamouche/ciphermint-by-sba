@@ -4,7 +4,7 @@
  * Usage:
  *   MANUAL_ATTEST_ENABLED=true \
  *   ZAMA_IDENTITY_REGISTRY_ADDRESS=0x... \
- *   ZAMA_RPC_URL=https://sepolia.infura.io/v3/... \
+ *   SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/... \
  *   ZAMA_TEST_REGISTRAR_PRIVATE_KEY=0x... \
  *   MANUAL_TEST_USER_ADDRESS=0x... \
  *   MANUAL_TEST_FULL_NAME="Your Unique Name $(date +%s)" \
@@ -41,7 +41,7 @@ describeIf(isManualEnabled(), "Manual attestIdentity smoke test", () => {
   const fullName =
     process.env.MANUAL_TEST_FULL_NAME ?? `Manual Test User ${Date.now()}`;
   const birthYear = Number(process.env.MANUAL_TEST_BIRTH_YEAR ?? "1992");
-  const rpcUrl = process.env.ZAMA_RPC_URL ?? "https://rpc.sepolia.org";
+  const rpcUrl = process.env.SEPOLIA_RPC_URL ?? "https://rpc.sepolia.org";
 
   beforeAll(async () => {
     if (overrideRegistrarKey) {

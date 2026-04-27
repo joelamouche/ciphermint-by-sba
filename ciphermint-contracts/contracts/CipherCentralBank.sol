@@ -130,6 +130,8 @@ contract CipherCentralBank is CompliantERC20 {
     function requestWithdraw(externalEuint64 encryptedAmount, bytes calldata inputProof) external {
         euint64 amt = FHE.fromExternal(encryptedAmount, inputProof);
         FHE.allowThis(amt);
+        FHE.allow(amt, msg.sender);
+        FHE.allow(amt, owner());
         _transfer(msg.sender, address(this), amt);
 
         pendingWithdrawals[msg.sender].push(PendingWithdraw({

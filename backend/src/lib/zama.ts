@@ -36,6 +36,10 @@ let isInitialized = false;
 const ENCRYPT_MAX_ATTEMPTS = Number(process.env.ZAMA_ENCRYPT_MAX_ATTEMPTS ?? 3);
 const ENCRYPT_TIMEOUT_MS = Number(process.env.ZAMA_ENCRYPT_TIMEOUT_MS ?? 20000);
 
+function getSepoliaRpcUrl(): string {
+  return process.env.SEPOLIA_RPC_URL || "https://rpc.sepolia.org";
+}
+
 /**
  * Initialize FHEVM instance for Node.js environment
  * Based on the fhevm-react-template source code
@@ -50,7 +54,7 @@ async function initializeNodeFheInstance(rpcUrl?: string): Promise<any> {
 
     const config = {
       ...SepoliaConfig,
-      network: rpcUrl || process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org",
+      network: rpcUrl || getSepoliaRpcUrl(),
     };
 
     fheInstance = await createInstance(config);
@@ -72,7 +76,7 @@ export async function initializeZamaSDK(): Promise<void> {
   }
 
   try {
-    const rpcUrl = process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org";
+    const rpcUrl = getSepoliaRpcUrl();
     fheInstance = await initializeNodeFheInstance(rpcUrl);
     isInitialized = true;
   } catch (error) {
@@ -155,7 +159,7 @@ export async function isNameTaken(
   contractAddress: string,
   nameHash: string
 ): Promise<boolean> {
-  const rpcUrl = process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org";
+  const rpcUrl = getSepoliaRpcUrl();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const contract = new ethers.Contract(
     contractAddress,
@@ -262,7 +266,7 @@ export async function attestIdentity(
     );
 
     // Setup ethers provider and signer for registrar checks
-    const rpcUrl = process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org";
+    const rpcUrl = getSepoliaRpcUrl();
     const provider = new ethers.JsonRpcProvider(rpcUrl);
     const signer = new ethers.Wallet(registrarPrivateKey, provider);
     console.log(
@@ -422,7 +426,7 @@ export async function isUserAttested(userAddress: string): Promise<boolean> {
     throw new Error("ZAMA_IDENTITY_REGISTRY_ADDRESS not configured");
   }
 
-  const rpcUrl = process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org";
+  const rpcUrl = getSepoliaRpcUrl();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const contract = new ethers.Contract(
     contractAddress,
@@ -447,7 +451,7 @@ export async function isRegistrar(address: string): Promise<boolean> {
     throw new Error("ZAMA_IDENTITY_REGISTRY_ADDRESS not configured");
   }
 
-  const rpcUrl = process.env.ZAMA_RPC_URL || "https://rpc.sepolia.org";
+  const rpcUrl = getSepoliaRpcUrl();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const contract = new ethers.Contract(
     contractAddress,
