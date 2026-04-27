@@ -10,6 +10,7 @@ import type { Status } from "../App";
 import { cipherCentralBankAbi } from "../abis/cipherCentralBank";
 import { CIPHER_CENTRAL_BANK_ADDRESS } from "../config";
 import { userDecryptEuint64 } from "../lib/fhevm";
+import { loadCachedBigint, saveCachedBigint } from "../lib/stateCache";
 
 export interface PendingVaultRequest {
   index: number;
@@ -33,6 +34,7 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
   const [pendingRequests, setPendingRequests] = useState<PendingVaultRequest[]>(
     []
   );
+  const csbaBalanceKey = userAddress ? `ciphermint-csba-balance-${userAddress}` : null;
 
   const { data: sharePriceScaled, refetch: refetchSharePrice } = useReadContract({
     address: CIPHER_CENTRAL_BANK_ADDRESS,
@@ -92,6 +94,9 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
 
       if (csbaHandle == null) {
         setCsbaBalance(0n);
+        if (csbaBalanceKey) {
+          saveCachedBigint(csbaBalanceKey, 0n);
+        }
       } else {
         const decryptedBalance = await userDecryptEuint64({
           encryptedValue: csbaHandle,
@@ -99,7 +104,11 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
           userAddress,
           signTypedDataAsync,
         });
-        setCsbaBalance(decryptedBalance ?? 0n);
+        const nextBalance = decryptedBalance ?? 0n;
+        setCsbaBalance(nextBalance);
+        if (csbaBalanceKey) {
+          saveCachedBigint(csbaBalanceKey, nextBalance);
+        }
       }
 
       const pendingCount = pendingCountRaw ? Number(pendingCountRaw) : 0;
@@ -149,9 +158,14 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
 
   useEffect(() => {
     decryptMutation.reset();
-    setCsbaBalance(null);
+    if (!csbaBalanceKey) {
+      setCsbaBalance(null);
+    } else {
+      const cachedCsbaBalance = loadCachedBigint(csbaBalanceKey);
+      setCsbaBalance(cachedCsbaBalance);
+    }
     setPendingRequests([]);
-  }, [userAddress]);
+  }, [csbaBalanceKey]);
 
   const pendingActive = pendingRequests.length > 0;
   const maturedRequestIndices = useMemo(
