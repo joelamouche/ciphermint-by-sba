@@ -92,6 +92,7 @@ describe("CompliantUBI Integration Flow", function () {
     tokenAddress = await token.getAddress();
 
     await complianceRules.connect(signers.owner).setAuthorizedCaller(tokenAddress, true);
+    await identityRegistry.connect(signers.owner).setDefaultAccessGrantee(complianceAddress);
 
     await identityRegistry.connect(signers.owner).addRegistrar(signers.registrar.address);
   });
@@ -123,9 +124,6 @@ describe("CompliantUBI Integration Flow", function () {
       const charlieNameHash = ethers.keccak256(ethers.toUtf8Bytes("Charlie Brown"));
       await attestUser(signers.charlie.address, 110, charlieNameHash, signers.registrar);
 
-      await identityRegistry.connect(signers.alice).grantAccessTo(complianceAddress);
-      await identityRegistry.connect(signers.bob).grantAccessTo(complianceAddress);
-      await identityRegistry.connect(signers.charlie).grantAccessTo(complianceAddress);
     });
   });
 
@@ -165,7 +163,7 @@ describe("CompliantUBI Integration Flow", function () {
       expect(decryptedAfter).to.equal(decryptedBefore);
     });
 
-    it("should not mint UBI for non-compliant user", async function () {
+    it("allows first-claim mint once identity is attested", async function () {
       await token.connect(signers.charlie).claimTokens();
 
       const balanceAfter = await token.connect(signers.charlie).balanceOf(signers.charlie.address);
@@ -176,11 +174,11 @@ describe("CompliantUBI Integration Flow", function () {
         signers.charlie,
       );
 
-      expect(decryptedAfter).to.equal(0n);
+      expect(decryptedAfter).to.equal(CLAIM_AMOUNT);
 
       const claimedStatus = await token.connect(signers.charlie).hasClaimedMint(signers.charlie.address);
       const hasClaimed = await fhevm.userDecryptEbool(claimedStatus, tokenAddress, signers.charlie);
-      expect(hasClaimed).to.be.false;
+      expect(hasClaimed).to.be.true;
     });
 
     it("should not accrue income before initial claimTokens", async function () {

@@ -17,6 +17,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { ethers } from "ethers";
 import { attestIdentity, initializeZamaSDK } from "../zama";
 
 const isManualEnabled = (): boolean =>
@@ -40,6 +41,7 @@ describeIf(isManualEnabled(), "Manual attestIdentity smoke test", () => {
   const fullName =
     process.env.MANUAL_TEST_FULL_NAME ?? `Manual Test User ${Date.now()}`;
   const birthYear = Number(process.env.MANUAL_TEST_BIRTH_YEAR ?? "1992");
+  const rpcUrl = process.env.ZAMA_RPC_URL ?? "https://rpc.sepolia.org";
 
   beforeAll(async () => {
     if (overrideRegistrarKey) {
@@ -85,6 +87,49 @@ describeIf(isManualEnabled(), "Manual attestIdentity smoke test", () => {
 
       console.log(
         `[manual-attest] success tx=${result.transactionHash} user=${userAddress}`
+      );
+    },
+    { timeout: 180000 }
+  );
+
+  it(
+    "manually claims UBI tokens with test user wallet",
+    async () => {
+      if (process.env.MANUAL_CLAIM_ENABLED !== "true") {
+        console.log("[manual-claim] skipped (set MANUAL_CLAIM_ENABLED=true)");
+        return;
+      }
+
+      const ubiAddress = process.env.ZAMA_COMPLIANT_UBI_ADDRESS;
+      const userPrivateKey = process.env.MANUAL_TEST_USER_PRIVATE_KEY;
+      if (!ubiAddress || !userPrivateKey) {
+        throw new Error(
+          "Missing env vars for manual claim test: ZAMA_COMPLIANT_UBI_ADDRESS, MANUAL_TEST_USER_PRIVATE_KEY"
+        );
+      }
+
+      const provider = new ethers.JsonRpcProvider(rpcUrl);
+      const userSigner = new ethers.Wallet(userPrivateKey, provider);
+      if (userSigner.address.toLowerCase() !== userAddress.toLowerCase()) {
+        throw new Error(
+          `MANUAL_TEST_USER_ADDRESS (${userAddress}) does not match private key address (${userSigner.address})`
+        );
+      }
+
+      const ubiContract = new ethers.Contract(
+        ubiAddress,
+        ["function claimTokens() external returns (bool)"],
+        userSigner
+      );
+
+      const tx = await ubiContract.claimTokens();
+      expect(tx.hash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+
+      const receipt = await tx.wait();
+      expect(receipt?.status).toBe(1);
+
+      console.log(
+        `[manual-claim] success tx=${tx.hash} user=${userSigner.address} contract=${ubiAddress}`
       );
     },
     { timeout: 180000 }

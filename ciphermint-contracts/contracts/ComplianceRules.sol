@@ -171,14 +171,23 @@ contract ComplianceRules is ZamaEthereumConfig {
         // Check if user is over 18
         ebool isOver18 = IDENTITY_REGISTRY.isOver18(user);
 
+        // Materialize a local ciphertext owned by this contract.
+        // On Sepolia, forwarding a handle created in IdentityRegistry can fail ACL checks
+        // when subsequently consumed by token contracts.
+        ebool trueValue = FHE.asEbool(true);
+        ebool falseValue = FHE.asEbool(false);
+        FHE.allowThis(trueValue);
+        FHE.allowThis(falseValue);
+        ebool localCompliance = FHE.select(isOver18, trueValue, falseValue);
+
         // Store and grant permissions
-        complianceResults[user] = isOver18;
-        FHE.allowThis(isOver18);
-        FHE.allow(isOver18, msg.sender);
+        complianceResults[user] = localCompliance;
+        FHE.allowThis(localCompliance);
+        FHE.allow(localCompliance, msg.sender);
 
         emit ComplianceChecked(user);
 
-        return isOver18;
+        return localCompliance;
     }
 
     /**

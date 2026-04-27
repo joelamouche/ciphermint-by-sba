@@ -60,6 +60,9 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
     /// @notice Authorized registrars who can attest identities
     mapping(address registrar => bool authorized) public registrars;
 
+    /// @notice Optional default grantee for birth-year access on attestation (e.g. ComplianceRules)
+    address public defaultAccessGrantee;
+
     /// @notice Thrown when caller lacks permission for encrypted data
     error AccessProhibited();
 
@@ -144,6 +147,11 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
 
         // Grant user permission to their own data
         FHE.allow(birthYear, user);
+
+        // Optional automatic grant for compliance checker contract.
+        if (defaultAccessGrantee != address(0)) {
+            FHE.allow(birthYear, defaultAccessGrantee);
+        }
 
         attestationTimestamp[user] = block.timestamp;
 
@@ -266,6 +274,12 @@ contract IdentityRegistry is IIdentityRegistry, ZamaEthereumConfig {
         FHE.allow(birthYearOffsets[msg.sender], grantee);
 
         emit AccessGranted(msg.sender, grantee);
+    }
+
+    /// @inheritdoc IIdentityRegistry
+    function setDefaultAccessGrantee(address grantee) external onlyOwner {
+        defaultAccessGrantee = grantee;
+        emit DefaultAccessGranteeUpdated(grantee);
     }
 
     /// @inheritdoc IIdentityRegistry

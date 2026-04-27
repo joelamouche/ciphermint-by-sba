@@ -112,6 +112,8 @@ contract CompliantERC20 is ZamaEthereumConfig, Ownable2Step {
         symbol = tokenSymbol;
         // Initialize encrypted total supply to 0
         totalSupply = FHE.asEuint64(0);
+        FHE.allowThis(totalSupply);
+        FHE.allow(totalSupply, initialOwner);
         if (checker != address(0)) {
             complianceChecker = IComplianceChecker(checker);
         }
@@ -318,6 +320,8 @@ contract CompliantERC20 is ZamaEthereumConfig, Ownable2Step {
      */
     function _transfer(address from, address to, euint64 amount) internal virtual returns (bool success) {
         ebool canTransfer;
+        euint64 fromBalance = _balanceOrZero(from);
+        euint64 toBalance = _balanceOrZero(to);
 
         if (from == to) revert SelfTransferNotAllowed();
 
@@ -328,21 +332,21 @@ contract CompliantERC20 is ZamaEthereumConfig, Ownable2Step {
             ebool bothCompliant = FHE.and(senderCompliant, recipientCompliant);
 
             // Check sufficient balance
-            ebool hasSufficientBalance = FHE.le(amount, balances[from]);
+            ebool hasSufficientBalance = FHE.le(amount, fromBalance);
 
             // Combine all conditions
             canTransfer = FHE.and(bothCompliant, hasSufficientBalance);
         } else {
             // No compliance checker, only check balance
-            canTransfer = FHE.le(amount, balances[from]);
+            canTransfer = FHE.le(amount, fromBalance);
         }
 
         // Branch-free: select actual amount or 0
         euint64 actualAmount = FHE.select(canTransfer, amount, FHE.asEuint64(0));
 
         // Update balances
-        euint64 newFromBalance = FHE.sub(balances[from], actualAmount);
-        euint64 newToBalance = FHE.add(balances[to], actualAmount);
+        euint64 newFromBalance = FHE.sub(fromBalance, actualAmount);
+        euint64 newToBalance = FHE.add(toBalance, actualAmount);
 
         balances[from] = newFromBalance;
         balances[to] = newToBalance;
@@ -371,7 +375,8 @@ contract CompliantERC20 is ZamaEthereumConfig, Ownable2Step {
      * @param mintAmount Encrypted amount to add
      */
     function _mintTo(address to, euint64 mintAmount) internal {
-        euint64 newBalance = FHE.add(balances[to], mintAmount);
+        euint64 currentBalance = _balanceOrZero(to);
+        euint64 newBalance = FHE.add(currentBalance, mintAmount);
         balances[to] = newBalance;
         FHE.allowThis(newBalance);
         FHE.allow(newBalance, to);
@@ -385,11 +390,25 @@ contract CompliantERC20 is ZamaEthereumConfig, Ownable2Step {
      * @param burnAmount Encrypted amount to subtract
      */
     function _burnFrom(address from, euint64 burnAmount) internal {
-        euint64 newBalance = FHE.sub(balances[from], burnAmount);
+        euint64 currentBalance = _balanceOrZero(from);
+        euint64 newBalance = FHE.sub(currentBalance, burnAmount);
         balances[from] = newBalance;
         FHE.allowThis(newBalance);
         FHE.allow(newBalance, from);
         FHE.allow(newBalance, owner());
+    }
+
+    /**
+     * @notice Return encrypted balance, initializing missing slots to encrypted zero for safe arithmetic
+     * @param account Address whose balance is read
+     * @return balance Encrypted balance (initialized ciphertext when the slot was empty)
+     */
+    function _balanceOrZero(address account) internal returns (euint64 balance) {
+        balance = balances[account];
+        if (!FHE.isInitialized(balance)) {
+            balance = FHE.asEuint64(0);
+            FHE.allowThis(balance);
+        }
     }
 
     /**

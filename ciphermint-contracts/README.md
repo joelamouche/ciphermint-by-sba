@@ -60,6 +60,27 @@ For FHEVM development details, see:
    npx hardhat deploy --network sepolia --tags IdentityRegistry
    ```
 
+6. **Run Sepolia smoke suite (ACL regression guard)**
+
+   ```bash
+   export SEPOLIA_IDENTITY_REGISTRY_ADDRESS=0x...
+   export SEPOLIA_COMPLIANCE_RULES_ADDRESS=0x...
+   export SEPOLIA_COMPLIANT_UBI_ADDRESS=0x...
+   export SEPOLIA_CIPHER_CENTRAL_BANK_ADDRESS=0x...
+   # optional: defaults to 1 SBA (1e8 base units)
+   export SEPOLIA_SMOKE_DEPOSIT_SBA_BASE_UNITS=100000000
+
+   npm run smoke:sepolia
+   ```
+
+   The smoke runner validates live Sepolia behavior for the ACL-sensitive path:
+   - wiring checks (`authorizedCallers`, `defaultAccessGrantee`)
+   - `attestIdentity`
+   - `claimTokens`
+   - `deposit`
+   - `requestWithdraw`
+   - optional `completeWithdraw` on any already-matured pending request
+
 ### Sepolia Deployments
 
 - `IdentityRegistry`: `0x7012F9F2c76355e904f34D23cb887c4D279efde8`
@@ -72,7 +93,7 @@ Frontend env (Sepolia):
 - `VITE_COMPLIANT_UBI_ADDRESS=0x39e170f640A4aa0fEC501d425661e24Ff2dFaE20`
 - `VITE_CIPHER_CENTRAL_BANK_ADDRESS=0xb4EA516F2D44f5ee494fDc6Bc15A5183872e361B`
 
-6. **Test on Sepolia Testnet**
+7. **Test on Sepolia Testnet**
 
    ```bash
    # Once deployed, you can run a simple test on Sepolia.
@@ -109,9 +130,21 @@ ciphermint-contracts/
 | ------------------ | ------------------------ |
 | `npm run compile`  | Compile all contracts    |
 | `npm run test`     | Run all tests            |
+| `npm run smoke:sepolia` | Run live Sepolia ACL smoke flow |
 | `npm run coverage` | Generate coverage report |
 | `npm run lint`     | Run linting checks       |
 | `npm run clean`    | Clean build artifacts    |
+
+## Refactor Regression Guard
+
+Use this checklist after any FHE refactor that changes encrypted-handle flow, ACL ownership, or cross-contract calls:
+
+- Initialize every newly introduced encrypted state slot before first arithmetic/read path.
+- Apply `FHE.allowThis(...)` on intermediate encrypted handles used later in the same contract.
+- Apply explicit ACL grants (`FHE.allow(...)`) for every cross-contract consumer of encrypted handles.
+- For constructor-created encrypted handles, verify initial ACL ownership and intended readers.
+- Keep deployment wiring aligned with tests (`authorizedCallers`, `defaultAccessGrantee`, registrars, minters/controllers).
+- Run `npm run smoke:sepolia` before frontend/backend deploy and treat failures as release blockers.
 
 ## 📚 Documentation
 

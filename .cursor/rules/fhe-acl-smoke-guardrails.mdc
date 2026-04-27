@@ -1,0 +1,13 @@
+---
+description: FHE ACL guardrails and Sepolia smoke requirements
+alwaysApply: true
+---
+
+# FHE ACL + Smoke Guardrails
+
+- Treat mock fhEVM as permissive and Sepolia as source of truth for ciphertext ACL behavior.
+- For each new encrypted handle flow, verify all three layers: initialization, `FHE.allowThis`, and cross-contract `FHE.allow`.
+- When introducing/refactoring cross-contract encrypted calls, explicitly document producer/consumer ACL ownership in comments or PR notes.
+- Keep deployment wiring in sync with integration assumptions (`authorizedCallers`, `defaultAccessGrantee`, registrar/minter/controller setup).
+- After any FHE refactor affecting claim/deposit/withdraw paths, run Sepolia smoke checks before merge/release.
+- Do not mark work complete if Sepolia smoke fails or is skipped without explicit user approval.

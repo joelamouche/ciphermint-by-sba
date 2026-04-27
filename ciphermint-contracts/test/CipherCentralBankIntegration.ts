@@ -89,10 +89,10 @@ describe("CipherCentralBank integration", function () {
       .then((f) => f.deploy(sbaAddr, complianceAddr, BLOCKS_PER_MONTH, owner.address))) as CipherCentralBank;
     bankAddr = await bank.getAddress();
     await compliance.connect(owner).setAuthorizedCaller(bankAddr, true);
+    await registry.connect(owner).setDefaultAccessGrantee(complianceAddr);
 
     await registry.connect(owner).addRegistrar(registrar.address);
     await attest(alice, 90, "Alice Bank");
-    await registry.connect(alice).grantAccessTo(complianceAddr);
 
     await sba.connect(owner).setCentralBankController(owner.address);
     await sba.connect(owner).setMinter(bankAddr, true);

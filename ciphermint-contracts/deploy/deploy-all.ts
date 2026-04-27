@@ -123,6 +123,13 @@ async function main() {
   ).wait();
   console.log("✅ Authorized SBA + bank on ComplianceRules");
 
+  await (
+    await identityRegistry.setDefaultAccessGrantee(complianceAddress, {
+      gasLimit: 800_000,
+    })
+  ).wait();
+  console.log("✅ Enabled automatic registry access grant for ComplianceRules");
+
   // Ensure deployer is a registrar (needed to attest identities)
   const isRegistrar = await identityRegistry.registrars(deployer.address);
   if (!isRegistrar) {

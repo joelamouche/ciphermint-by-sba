@@ -64,6 +64,10 @@ interface IIdentityRegistry {
     /// @param grantee Address receiving access
     event AccessGranted(address indexed user, address indexed grantee);
 
+    /// @notice Emitted when default encrypted-data grantee is updated
+    /// @param grantee Address that will automatically receive access on attestation
+    event DefaultAccessGranteeUpdated(address indexed grantee);
+
     // ============ Registrar Management ============
 
     /// @notice Add an authorized registrar
@@ -130,6 +134,10 @@ interface IIdentityRegistry {
     /// @notice Grant access to encrypted identity data
     /// @param grantee Address to grant access to
     function grantAccessTo(address grantee) external;
+
+    /// @notice Set default grantee for encrypted identity access on attestation
+    /// @param grantee Address to grant access to automatically (zero disables)
+    function setDefaultAccessGrantee(address grantee) external;
 
     /// @notice Check if a user has an attested identity
     /// @param user Address of the user
