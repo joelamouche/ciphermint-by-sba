@@ -5,34 +5,31 @@ interface VaultInfoCardProps {
   vaultStatus: Status;
   onRefreshVault: () => void;
   csbaBalance: bigint | null;
-  sharePriceScaled?: bigint;
   monthlyRateBps?: bigint;
-  blocksPerMonth?: bigint;
 }
 
 export function VaultInfoCard({
   vaultStatus,
   onRefreshVault,
   csbaBalance,
-  sharePriceScaled,
   monthlyRateBps,
-  blocksPerMonth,
 }: VaultInfoCardProps) {
   const encryptedCsba = csbaBalance == null;
+  const monthlyRoiPercent =
+    monthlyRateBps != null ? (Number(monthlyRateBps) / 100).toFixed(2) : null;
 
   return (
     <section className="card">
       <h2>Vault Overview</h2>
-      <p className="muted">CSBA balance and vault pricing parameters.</p>
-      <div className="status-row">
-        <span>Refresh CSBA balance</span>
+      <p className="muted">Your CSBA position and expected monthly return.</p>
+      <div className="status-row vault-info-actions">
         <button
           type="button"
           className={`ghost ${vaultStatus === "loading" ? "ghost-warn" : ""}`}
           onClick={onRefreshVault}
           disabled={vaultStatus === "loading"}
         >
-          {vaultStatus === "loading" ? "Refreshing..." : "Refresh"}
+          {vaultStatus === "loading" ? "Refreshing..." : "Refresh vault data"}
         </button>
       </div>
 
@@ -44,16 +41,8 @@ export function VaultInfoCard({
           </strong>
         </div>
         <div>
-          <span>Share price scaled (1e8)</span>
-          <strong>{sharePriceScaled != null ? sharePriceScaled.toString() : "-"}</strong>
-        </div>
-        <div>
-          <span>Monthly rate</span>
-          <strong>{monthlyRateBps != null ? `${monthlyRateBps.toString()} bps` : "-"}</strong>
-        </div>
-        <div>
-          <span>Blocks per month</span>
-          <strong>{blocksPerMonth != null ? blocksPerMonth.toString() : "-"}</strong>
+          <span>Monthly ROI</span>
+          <strong>{monthlyRoiPercent != null ? `${monthlyRoiPercent}%` : "-"}</strong>
         </div>
       </div>
     </section>

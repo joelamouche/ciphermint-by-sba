@@ -268,9 +268,7 @@ export default function App() {
     pendingActive,
     pendingUnlockBlock,
     blocksUntilUnlock,
-    sharePriceScaled,
     monthlyRateBps,
-    blocksPerMonth,
     currentBlock,
     refreshVaultData,
     vaultStatus,
@@ -545,9 +543,7 @@ export default function App() {
                   vaultStatus={vaultStatus}
                   onRefreshVault={refreshVaultData}
                   csbaBalance={csbaBalance}
-                  sharePriceScaled={sharePriceScaled}
                   monthlyRateBps={monthlyRateBps}
-                  blocksPerMonth={blocksPerMonth}
                 />
                 <BalanceCard
                   balance={balance}

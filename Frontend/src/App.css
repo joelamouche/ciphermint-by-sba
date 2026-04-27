@@ -208,6 +208,14 @@ h2 {
   margin-left: auto;
 }
 
+.vault-info-actions {
+  justify-content: flex-start;
+}
+
+.vault-info-actions button {
+  margin-left: 0;
+}
+
 .vault-position-item {
   border: 1px solid #2e2e44;
   border-radius: 12px;
