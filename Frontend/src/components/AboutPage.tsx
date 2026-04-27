@@ -4,12 +4,11 @@ export default function AboutPage() {
       <section className="card">
         <h2>What is CipherMint?</h2>
         <p>
-          CipherMint is a KYC-gated UBI experiment for unique names, built on
-          Zama&apos;s FHEVM. Each verified human with a unique full name can
-          claim an initial allocation of <strong>100 SBA</strong> and then
-          accrue income over time targeting roughly <strong>10 SBA</strong> per
-          month. This UBI token is the base currency for all SBA DeFi and RWA
-          demos.
+          CipherMint is a confidential, compliant monetary stack built on
+          Zama&apos;s FHEVM. Verified humans with unique names can claim and
+          accrue <strong>SBA</strong> (UBI token), then use SBA in the{" "}
+          <strong>Central Bank Vault</strong> to mint <strong>CSBA</strong>{" "}
+          shares with a compounded SBA share price and delayed exit flow.
         </p>
       </section>
 
@@ -27,14 +26,14 @@ export default function AboutPage() {
             checks.
           </li>
           <li>
-            The token acts as shared test liquidity for SBA&apos;s DeFi and RWA
-            demos.
+            The system has two monetary layers: SBA (UBI + transfers) and CSBA
+            (vault shares for delayed redemption).
           </li>
         </ul>
       </section>
 
       <section className="card">
-        <h2>How it works</h2>
+        <h2>How UBI works</h2>
         <ol className="about-list">
           <li>Connect your wallet and check your on-chain identity status.</li>
           <li>
@@ -59,26 +58,50 @@ export default function AboutPage() {
       </section>
 
       <section className="card">
+        <h2>How the Central Bank Vault works</h2>
+        <ol className="about-list">
+          <li>
+            Deposit encrypted <strong>SBA</strong> into the vault to receive{" "}
+            <strong>CSBA</strong> shares.
+          </li>
+          <li>
+            CSBA value is based on <code>sharePriceScaled</code>, which compounds
+            monthly using <code>monthlyRateBps</code>.
+          </li>
+          <li>
+            Withdrawals are two-step: first{" "}
+            <code>requestWithdraw</code> to lock CSBA for one month, then{" "}
+            <code>completeWithdraw</code> after unlock.
+          </li>
+          <li>
+            Each request is stored as its own pending position, so users can run
+            multiple withdrawals in parallel and complete them independently.
+          </li>
+        </ol>
+      </section>
+
+      <section className="card">
         <h2>High-level architecture</h2>
         <div className="about-architecture">
           <div>
             <strong>Frontend</strong>
             <span>
-              Wallet login, landing &amp; dashboard, UBI claim UI, encrypted
-              balance reads
+              Wallet login, KYC flow, UBI actions, vault actions, encrypted
+              balance and pending-position reads
             </span>
           </div>
           <div>
             <strong>Backend</strong>
             <span>
-              KYC provider webhooks, name uniqueness checks, registry writes
+              KYC provider webhooks, name uniqueness checks, registry writes,
+              relayer-backed attestation jobs
             </span>
           </div>
           <div>
             <strong>Zama FHEVM</strong>
             <span>
-              IdentityRegistry + CompliantERC20 enforcing KYC-gated UBI and
-              confidential transfers
+              IdentityRegistry + ComplianceRules + CompliantUBI (SBA) +
+              CipherCentralBank (CSBA)
             </span>
           </div>
           <div>
@@ -93,9 +116,9 @@ export default function AboutPage() {
         <p>
           CipherMint stores no documents or raw PII. The chain only holds
           encrypted attributes and hashed identifiers. Using Zama FHEVM, UBI
-          eligibility, name uniqueness, and transfer compliance can be enforced
-          on-chain without revealing sensitive data, allowing SBA&apos;s DeFi
-          demos to stay both confidential and compliant.
+          eligibility, name uniqueness, transfer gating, and vault accounting
+          are enforced on-chain without revealing sensitive data, allowing SBA
+          and CSBA flows to remain confidential and compliant.
         </p>
       </section>
     </div>
