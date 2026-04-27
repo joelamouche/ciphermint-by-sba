@@ -269,6 +269,7 @@ export default function App() {
     pendingActive,
     pendingUnlockBlock,
     blocksUntilUnlock,
+    blocksPerMonth,
     sharePriceScaled,
     monthlyRateBps,
     currentBlock,
@@ -496,6 +497,7 @@ export default function App() {
                   vaultStatus={vaultStatus}
                   onRefreshVault={refreshVaultData}
                   pendingRequests={pendingRequests}
+                  blocksPerMonth={blocksPerMonth}
                   completeStatus={completeState.status}
                   completePhase={completeState.phase}
                   completeConfirmationsRemaining={completeState.confirmationsRemaining}

@@ -6,6 +6,7 @@ interface VaultWithdrawalsPanelProps {
   vaultStatus: Status;
   onRefreshVault: () => void;
   pendingRequests: PendingVaultRequest[];
+  blocksPerMonth?: bigint;
   completeStatus: Status;
   completePhase: "idle" | "encrypting" | "signing" | "confirming";
   completeConfirmationsRemaining: number | null;
@@ -17,6 +18,7 @@ export function VaultWithdrawalsPanel({
   vaultStatus,
   onRefreshVault,
   pendingRequests,
+  blocksPerMonth,
   completeStatus,
   completePhase,
   completeConfirmationsRemaining,
@@ -24,6 +26,22 @@ export function VaultWithdrawalsPanel({
   onCompleteMatured,
 }: VaultWithdrawalsPanelProps) {
   const maturedCount = pendingRequests.filter((request) => request.ready).length;
+  const getApproxUnlockTime = (blocksUntilUnlock: bigint) => {
+    if (!blocksPerMonth || blocksPerMonth <= 0n) return null;
+    const months = Number(blocksUntilUnlock) / Number(blocksPerMonth);
+    if (!Number.isFinite(months)) return null;
+    if (months >= 1) {
+      const roundedMonths = Math.round(months * 10) / 10;
+      return `${roundedMonths} month${roundedMonths === 1 ? "" : "s"}`;
+    }
+    const days = months * 30;
+    if (days >= 1) {
+      const roundedDays = Math.max(1, Math.round(days));
+      return `${roundedDays} day${roundedDays === 1 ? "" : "s"}`;
+    }
+    const hours = Math.max(1, Math.round(days * 24));
+    return `${hours} hour${hours === 1 ? "" : "s"}`;
+  };
 
   return (
     <section className="card">
@@ -96,7 +114,15 @@ export function VaultWithdrawalsPanel({
                 <span className={request.ready ? "status-good" : "status-warn"}>
                   {request.ready
                     ? "Ready to complete"
-                    : `${request.blocksUntilUnlock.toString()} blocks to unlock`}
+                    : (() => {
+                        const approxUnlock = getApproxUnlockTime(
+                          request.blocksUntilUnlock
+                        );
+                        const blocksLabel = `${request.blocksUntilUnlock.toLocaleString()} blocks`;
+                        return approxUnlock
+                          ? `${blocksLabel} (~${approxUnlock}) to unlock`
+                          : `${blocksLabel} to unlock`;
+                      })()}
                 </span>
               </div>
               <div className="vault-position-metrics">
