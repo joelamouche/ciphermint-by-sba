@@ -24,6 +24,7 @@ interface ActionPanelProps {
   transferTo: string;
   transferAmount: string;
   transferStatus: Status;
+  transferPhase: "idle" | "encrypting" | "signing" | "confirming";
   claimConfirmationsRemaining: number | null;
   transferConfirmationsRemaining: number | null;
   onStartKyc: () => void;
@@ -49,6 +50,7 @@ export function ActionPanel({
   transferTo,
   transferAmount,
   transferStatus,
+  transferPhase,
   claimConfirmationsRemaining,
   transferConfirmationsRemaining,
   onStartKyc,
@@ -214,15 +216,25 @@ export function ActionPanel({
             }
           >
             {transferStatus === "loading"
-              ? "Submitting transfer..."
+              ? transferPhase === "encrypting"
+                ? "Encrypting input..."
+                : "Waiting for signature..."
               : transferStatus === "confirming"
-                ? "Waiting..."
+                ? "Waiting for confirmations..."
               : transferStatus === "success"
                 ? "Send another transfer"
                 : transferStatus === "error"
                   ? "Retry transfer"
                   : "Send transfer"}
           </button>
+          {transferStatus === "loading" && transferPhase === "encrypting" && (
+            <p className="muted status-center">
+              Encrypting transfer amount with Zama relayer...
+            </p>
+          )}
+          {transferStatus === "loading" && transferPhase === "signing" && (
+            <p className="muted status-center">Confirm transaction in your wallet.</p>
+          )}
           {transferStatus === "confirming" &&
             transferConfirmationsRemaining != null && (
               <p className="muted status-center">

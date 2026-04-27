@@ -214,6 +214,7 @@ export default function App() {
     handleTransfer,
     status: transferStatus,
     confirmationsRemaining: transferConfirmationsRemaining,
+    phase: transferPhase,
   } = useTransferTokens({
     tokenAddress: COMPLIANT_ERC20_ADDRESS,
     userAddress: address,
@@ -268,6 +269,7 @@ export default function App() {
     pendingActive,
     pendingUnlockBlock,
     blocksUntilUnlock,
+    sharePriceScaled,
     monthlyRateBps,
     currentBlock,
     refreshVaultData,
@@ -454,6 +456,7 @@ export default function App() {
                   transferTo={transferTo}
                   transferAmount={transferAmount}
                   transferStatus={transferStatus}
+                  transferPhase={transferPhase}
                   claimConfirmationsRemaining={claimConfirmationsRemaining}
                   transferConfirmationsRemaining={
                     transferConfirmationsRemaining
@@ -481,8 +484,10 @@ export default function App() {
                   onRequestWithdraw={handleVaultRequestWithdraw}
                   depositStatus={depositState.status}
                   depositConfirmationsRemaining={depositState.confirmationsRemaining}
+                  depositPhase={depositState.phase}
                   requestStatus={requestState.status}
                   requestConfirmationsRemaining={requestState.confirmationsRemaining}
+                  requestPhase={requestState.phase}
                   hasPendingWithdraw={pendingActive}
                   depositExceeded={depositExceeded}
                   withdrawExceeded={withdrawExceeded}
@@ -492,6 +497,8 @@ export default function App() {
                   onRefreshVault={refreshVaultData}
                   pendingRequests={pendingRequests}
                   completeStatus={completeState.status}
+                  completePhase={completeState.phase}
+                  completeConfirmationsRemaining={completeState.confirmationsRemaining}
                   onCompleteRequest={handleVaultCompleteWithdraw}
                   onCompleteMatured={handleVaultCompleteMatured}
                 />
@@ -543,6 +550,7 @@ export default function App() {
                   vaultStatus={vaultStatus}
                   onRefreshVault={refreshVaultData}
                   csbaBalance={csbaBalance}
+                  sharePriceScaled={sharePriceScaled}
                   monthlyRateBps={monthlyRateBps}
                 />
                 <BalanceCard

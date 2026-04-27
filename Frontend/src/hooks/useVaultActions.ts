@@ -27,6 +27,7 @@ interface UseVaultActionsParams {
 interface ActionState {
   status: Status;
   confirmationsRemaining: number | null;
+  phase: "idle" | "encrypting" | "signing" | "confirming";
 }
 
 const REQUIRED_CONFIRMATIONS = TX_CONFIRMATIONS_REQUIRED;
@@ -57,14 +58,17 @@ export function useVaultActions({
   const [depositState, setDepositState] = useState<ActionState>({
     status: "idle",
     confirmationsRemaining: null,
+    phase: "idle",
   });
   const [requestState, setRequestState] = useState<ActionState>({
     status: "idle",
     confirmationsRemaining: null,
+    phase: "idle",
   });
   const [completeState, setCompleteState] = useState<ActionState>({
     status: "idle",
     confirmationsRemaining: null,
+    phase: "idle",
   });
 
   const waitForConfirmations = async (
@@ -72,7 +76,7 @@ export function useVaultActions({
     setState: (next: ActionState) => void
   ) => {
     if (!publicClient) {
-      setState({ status: "success", confirmationsRemaining: null });
+      setState({ status: "success", confirmationsRemaining: null, phase: "idle" });
       return;
     }
     const receipt = await publicClient.waitForTransactionReceipt({
@@ -85,11 +89,15 @@ export function useVaultActions({
       const latestBlock = await publicClient.getBlockNumber();
       const confirmations = Number(latestBlock - minedBlock + 1n);
       const remaining = Math.max(0, REQUIRED_CONFIRMATIONS - confirmations);
-      setState({ status: "confirming", confirmationsRemaining: remaining });
+      setState({
+        status: "confirming",
+        confirmationsRemaining: remaining,
+        phase: "confirming",
+      });
       if (remaining <= 0) break;
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
-    setState({ status: "success", confirmationsRemaining: null });
+    setState({ status: "success", confirmationsRemaining: null, phase: "idle" });
   };
 
   const deposit = async (rawAmount: string) => {
@@ -102,7 +110,11 @@ export function useVaultActions({
       if (amount <= 0n) {
         throw new Error("Deposit amount must be greater than zero.");
       }
-      setDepositState({ status: "loading", confirmationsRemaining: null });
+      setDepositState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "encrypting",
+      });
 
       const approvedAmount = await encryptUint64(COMPLIANT_UBI_ADDRESS, userAddress, amount);
       const approveHandle = normalizeHex(approvedAmount.handle);
@@ -110,6 +122,11 @@ export function useVaultActions({
       if (!approveHandle || !approveProof) {
         throw new Error("Invalid encrypted payload for SBA approval.");
       }
+      setDepositState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "signing",
+      });
       const approveHash = await writeContractAsync({
         address: COMPLIANT_UBI_ADDRESS,
         abi: compliantErc20Abi,
@@ -119,9 +136,15 @@ export function useVaultActions({
       setDepositState({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
+        phase: "confirming",
       });
       await waitForConfirmations(approveHash, setDepositState);
 
+      setDepositState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "encrypting",
+      });
       const depositAmount = await encryptUint64(
         CIPHER_CENTRAL_BANK_ADDRESS,
         userAddress,
@@ -132,7 +155,11 @@ export function useVaultActions({
       if (!depositHandle || !depositProof) {
         throw new Error("Invalid encrypted payload for vault deposit.");
       }
-      setDepositState({ status: "loading", confirmationsRemaining: null });
+      setDepositState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "signing",
+      });
       const depositHash = await writeContractAsync({
         address: CIPHER_CENTRAL_BANK_ADDRESS,
         abi: cipherCentralBankAbi,
@@ -142,11 +169,12 @@ export function useVaultActions({
       setDepositState({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
+        phase: "confirming",
       });
       await waitForConfirmations(depositHash, setDepositState);
       await onSuccess?.("deposit");
     } catch (err) {
-      setDepositState({ status: "error", confirmationsRemaining: null });
+      setDepositState({ status: "error", confirmationsRemaining: null, phase: "idle" });
       setError(err instanceof Error ? err.message : "Vault deposit failed.");
     }
   };
@@ -161,14 +189,22 @@ export function useVaultActions({
       if (amount <= 0n) {
         throw new Error("Withdrawal request amount must be greater than zero.");
       }
+      setRequestState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "encrypting",
+      });
       const encrypted = await encryptUint64(CIPHER_CENTRAL_BANK_ADDRESS, userAddress, amount);
       const handle = normalizeHex(encrypted.handle);
       const proof = normalizeHex(encrypted.inputProof);
       if (!handle || !proof) {
         throw new Error("Invalid encrypted payload for withdraw request.");
       }
-
-      setRequestState({ status: "loading", confirmationsRemaining: null });
+      setRequestState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "signing",
+      });
       const hash = await writeContractAsync({
         address: CIPHER_CENTRAL_BANK_ADDRESS,
         abi: cipherCentralBankAbi,
@@ -178,11 +214,12 @@ export function useVaultActions({
       setRequestState({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
+        phase: "confirming",
       });
       await waitForConfirmations(hash, setRequestState);
       await onSuccess?.("requestWithdraw");
     } catch (err) {
-      setRequestState({ status: "error", confirmationsRemaining: null });
+      setRequestState({ status: "error", confirmationsRemaining: null, phase: "idle" });
       setError(err instanceof Error ? err.message : "Withdraw request failed.");
     }
   };
@@ -196,7 +233,11 @@ export function useVaultActions({
       if (!Number.isInteger(requestIndex) || requestIndex < 0) {
         throw new Error("Invalid withdrawal request index.");
       }
-      setCompleteState({ status: "loading", confirmationsRemaining: null });
+      setCompleteState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "signing",
+      });
       const hash = await writeContractAsync({
         address: CIPHER_CENTRAL_BANK_ADDRESS,
         abi: cipherCentralBankAbi,
@@ -206,11 +247,12 @@ export function useVaultActions({
       setCompleteState({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
+        phase: "confirming",
       });
       await waitForConfirmations(hash, setCompleteState);
       await onSuccess?.("completeWithdraw");
     } catch (err) {
-      setCompleteState({ status: "error", confirmationsRemaining: null });
+      setCompleteState({ status: "error", confirmationsRemaining: null, phase: "idle" });
       setError(err instanceof Error ? err.message : "Complete withdraw failed.");
     }
   };
@@ -230,7 +272,11 @@ export function useVaultActions({
         }
         return BigInt(value);
       });
-      setCompleteState({ status: "loading", confirmationsRemaining: null });
+      setCompleteState({
+        status: "loading",
+        confirmationsRemaining: null,
+        phase: "signing",
+      });
       const hash = await writeContractAsync({
         address: CIPHER_CENTRAL_BANK_ADDRESS,
         abi: cipherCentralBankAbi,
@@ -240,11 +286,12 @@ export function useVaultActions({
       setCompleteState({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
+        phase: "confirming",
       });
       await waitForConfirmations(hash, setCompleteState);
       await onSuccess?.("completeWithdrawMany");
     } catch (err) {
-      setCompleteState({ status: "error", confirmationsRemaining: null });
+      setCompleteState({ status: "error", confirmationsRemaining: null, phase: "idle" });
       setError(err instanceof Error ? err.message : "Batch complete withdraw failed.");
     }
   };

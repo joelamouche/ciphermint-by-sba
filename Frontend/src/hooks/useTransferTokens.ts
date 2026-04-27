@@ -30,6 +30,9 @@ export function useTransferTokens({
   const [confirmationsRemaining, setConfirmationsRemaining] = useState<
     number | null
   >(null);
+  const [phase, setPhase] = useState<
+    "idle" | "encrypting" | "signing" | "confirming"
+  >("idle");
   const REQUIRED_CONFIRMATIONS = TX_CONFIRMATIONS_REQUIRED;
   const normalizeHex = (value: unknown): Hex | null => {
     if (typeof value === "string") {
@@ -64,6 +67,7 @@ export function useTransferTokens({
       if (amountValue <= 0n) {
         throw new Error("Amount must be greater than zero.");
       }
+      setPhase("encrypting");
       const { handle, inputProof } = await encryptUint64(
         tokenAddress,
         userAddress,
@@ -80,6 +84,7 @@ export function useTransferTokens({
       const recipient = transferTo as Address;
 
       setStatus("loading");
+      setPhase("signing");
       const hash = await writeContractAsync({
         address: tokenAddress,
         abi: abi as any,
@@ -88,6 +93,7 @@ export function useTransferTokens({
       });
       setStatus("confirming");
       setConfirmationsRemaining(REQUIRED_CONFIRMATIONS);
+      setPhase("confirming");
 
       return hash;
     },
@@ -95,11 +101,13 @@ export function useTransferTokens({
       setError(err instanceof Error ? err.message : "Transfer failed.");
       setStatus("error");
       setConfirmationsRemaining(null);
+      setPhase("idle");
     },
     onSuccess: async (hash) => {
       if (!publicClient) {
         setStatus("success");
         setConfirmationsRemaining(null);
+        setPhase("idle");
         return;
       }
 
@@ -133,9 +141,11 @@ export function useTransferTokens({
 
         setStatus("success");
         setConfirmationsRemaining(null);
+        setPhase("idle");
       } catch (error) {
         setStatus("error");
         setConfirmationsRemaining(null);
+        setPhase("idle");
         setError(
           error instanceof Error ? error.message : "Transfer failed.",
         );
@@ -147,6 +157,7 @@ export function useTransferTokens({
     mutation.reset();
     setStatus("idle");
     setConfirmationsRemaining(null);
+    setPhase("idle");
   }, [tokenAddress, userAddress, transferTo, transferAmount]);
 
   const handleTransfer = async () => {
@@ -158,5 +169,5 @@ export function useTransferTokens({
     }
   };
 
-  return { handleTransfer, status, confirmationsRemaining };
+  return { handleTransfer, status, confirmationsRemaining, phase };
 }

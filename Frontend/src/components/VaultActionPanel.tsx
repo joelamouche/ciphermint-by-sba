@@ -14,8 +14,10 @@ interface VaultActionPanelProps {
   onRequestWithdraw: () => void;
   depositStatus: Status;
   depositConfirmationsRemaining: number | null;
+  depositPhase: "idle" | "encrypting" | "signing" | "confirming";
   requestStatus: Status;
   requestConfirmationsRemaining: number | null;
+  requestPhase: "idle" | "encrypting" | "signing" | "confirming";
   hasPendingWithdraw: boolean;
   depositExceeded: boolean;
   withdrawExceeded: boolean;
@@ -34,8 +36,10 @@ export function VaultActionPanel({
   onRequestWithdraw,
   depositStatus,
   depositConfirmationsRemaining,
+  depositPhase,
   requestStatus,
   requestConfirmationsRemaining,
+  requestPhase,
   hasPendingWithdraw,
   depositExceeded,
   withdrawExceeded,
@@ -84,15 +88,25 @@ export function VaultActionPanel({
         }
       >
         {depositStatus === "loading"
-          ? "Submitting..."
+          ? depositPhase === "encrypting"
+            ? "Encrypting input..."
+            : "Waiting for signature..."
           : depositStatus === "confirming"
-            ? "Waiting..."
+            ? "Waiting for confirmations..."
             : depositStatus === "success"
               ? "Deposit again"
               : depositStatus === "error"
                 ? "Retry deposit"
                 : "Deposit SBA"}
       </button>
+      {depositStatus === "loading" && depositPhase === "encrypting" && (
+        <p className="muted status-center">
+          Encrypting SBA amount with Zama relayer...
+        </p>
+      )}
+      {depositStatus === "loading" && depositPhase === "signing" && (
+        <p className="muted status-center">Confirm transaction in your wallet.</p>
+      )}
       {depositStatus === "confirming" && depositConfirmationsRemaining != null && (
         <p className="status-warn status-center">
           {depositConfirmationsRemaining} block
@@ -133,15 +147,25 @@ export function VaultActionPanel({
         }
       >
         {requestStatus === "loading"
-          ? "Submitting..."
+          ? requestPhase === "encrypting"
+            ? "Encrypting input..."
+            : "Waiting for signature..."
           : requestStatus === "confirming"
-            ? "Waiting..."
+            ? "Waiting for confirmations..."
             : requestStatus === "success"
               ? "Request another withdrawal"
               : requestStatus === "error"
                 ? "Retry request"
                 : "Request withdrawal"}
       </button>
+      {requestStatus === "loading" && requestPhase === "encrypting" && (
+        <p className="muted status-center">
+          Encrypting CSBA amount with Zama relayer...
+        </p>
+      )}
+      {requestStatus === "loading" && requestPhase === "signing" && (
+        <p className="muted status-center">Confirm transaction in your wallet.</p>
+      )}
       {requestStatus === "confirming" && requestConfirmationsRemaining != null && (
         <p className="status-warn status-center">
           {requestConfirmationsRemaining} block

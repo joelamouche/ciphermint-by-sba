@@ -7,6 +7,8 @@ interface VaultWithdrawalsPanelProps {
   onRefreshVault: () => void;
   pendingRequests: PendingVaultRequest[];
   completeStatus: Status;
+  completePhase: "idle" | "encrypting" | "signing" | "confirming";
+  completeConfirmationsRemaining: number | null;
   onCompleteRequest: (requestIndex: number) => void;
   onCompleteMatured: () => void;
 }
@@ -16,6 +18,8 @@ export function VaultWithdrawalsPanel({
   onRefreshVault,
   pendingRequests,
   completeStatus,
+  completePhase,
+  completeConfirmationsRemaining,
   onCompleteRequest,
   onCompleteMatured,
 }: VaultWithdrawalsPanelProps) {
@@ -67,12 +71,23 @@ export function VaultWithdrawalsPanel({
               }
             >
               {completeStatus === "loading"
-                ? "Submitting..."
+                ? "Waiting for signature..."
                 : completeStatus === "confirming"
-                  ? "Waiting..."
+                  ? "Waiting for confirmations..."
                   : "Complete all matured"}
             </button>
           </div>
+          {completeStatus === "loading" && completePhase === "signing" && (
+            <p className="muted status-center">Confirm transaction in your wallet.</p>
+          )}
+          {completeStatus === "confirming" &&
+            completeConfirmationsRemaining != null && (
+              <p className="status-warn status-center">
+                {completeConfirmationsRemaining} block
+                {completeConfirmationsRemaining === 1 ? "" : "s"} confirmations
+                remaining
+              </p>
+            )}
 
           {pendingRequests.map((request) => (
             <div key={request.index} className="vault-position-item">
@@ -108,7 +123,11 @@ export function VaultWithdrawalsPanel({
                   completeStatus === "confirming"
                 }
               >
-                Complete position
+                {completeStatus === "loading"
+                  ? "Waiting for signature..."
+                  : completeStatus === "confirming"
+                    ? "Waiting for confirmations..."
+                    : "Complete position"}
               </button>
             </div>
           ))}
