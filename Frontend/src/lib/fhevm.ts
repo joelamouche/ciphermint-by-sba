@@ -16,7 +16,7 @@ export async function getFhevmInstance(): Promise<any> {
         ...relayer.SepoliaConfig,
         network:
           import.meta.env.VITE_RPC_URL ??
-          "https://sepolia.infura.io/v3/c14b133a94f541c580f37fe718ec4fa9",
+          "https://ethereum-sepolia-rpc.publicnode.com",
       };
       return relayer.createInstance(config);
     })();

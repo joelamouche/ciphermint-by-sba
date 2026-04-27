@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@rainbow-me/rainbowkit/styles.css";
 import { getDefaultConfig, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
+import { http } from "viem";
 import { sepolia } from "wagmi/chains";
 import App from "./App";
 import "./index.css";
@@ -14,11 +15,17 @@ if (typeof window !== "undefined" && !(window as any).global) {
 
 const projectId =
   import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? "ciphermint-local";
+const rpcUrl =
+  import.meta.env.VITE_RPC_URL ??
+  "https://ethereum-sepolia-rpc.publicnode.com";
 
 const config = getDefaultConfig({
   appName: "CipherMint",
   projectId,
   chains: [sepolia],
+  transports: {
+    [sepolia.id]: http(rpcUrl),
+  },
   ssr: false,
 });
 
