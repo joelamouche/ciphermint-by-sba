@@ -86,7 +86,9 @@ describe("CipherCentralBank integration", function () {
 
     bank = (await ethers
       .getContractFactory("CipherCentralBank")
-      .then((f) => f.deploy(sbaAddr, complianceAddr, BLOCKS_PER_MONTH, owner.address))) as CipherCentralBank;
+      .then((f) =>
+        f.deploy("CipherSBA Bills", "CSBA", sbaAddr, complianceAddr, BLOCKS_PER_MONTH, owner.address),
+      )) as CipherCentralBank;
     bankAddr = await bank.getAddress();
     await compliance.connect(owner).setAuthorizedCaller(bankAddr, true);
     await registry.connect(owner).setDefaultAccessGrantee(complianceAddr);
@@ -101,7 +103,9 @@ describe("CipherCentralBank integration", function () {
 
   it("reverts on zero SBA in constructor", async function () {
     const F = await ethers.getContractFactory("CipherCentralBank");
-    await expect(F.deploy(ethers.ZeroAddress, complianceAddr, BLOCKS_PER_MONTH, owner.address)).to.be.revertedWithCustomError(
+    await expect(
+      F.deploy("CipherSBA Bills", "CSBA", ethers.ZeroAddress, complianceAddr, BLOCKS_PER_MONTH, owner.address),
+    ).to.be.revertedWithCustomError(
       F,
       "ZeroOwner",
     );
@@ -109,7 +113,9 @@ describe("CipherCentralBank integration", function () {
 
   it("reverts on zero blocksPerMonth", async function () {
     const F = await ethers.getContractFactory("CipherCentralBank");
-    await expect(F.deploy(sbaAddr, complianceAddr, 0, owner.address)).to.be.revertedWithCustomError(F, "TotalSupplyOverflow");
+    await expect(
+      F.deploy("CipherSBA Bills", "CSBA", sbaAddr, complianceAddr, 0, owner.address),
+    ).to.be.revertedWithCustomError(F, "TotalSupplyOverflow");
   });
 
   it("deposit: first depositor mints CSBA ~1:1 and credits vaultSbaAssets", async function () {

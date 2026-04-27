@@ -96,18 +96,34 @@ async function main() {
   // 4) CipherCentralBank
   console.log("📋 Deploying CipherCentralBank...");
   const CipherCentralBank = await ethers.getContractFactory("CipherCentralBank");
-  const blocksPerMonth = 216_000; // override per-chain if needed
+  const blocksPerMonth = 216_000; // ~30 days on Sepolia
   const {
-    contract: _bank,
+    contract: bank,
     address: bankAddress,
     deployed: deployedBank,
   } = await deployCreate2OrReuse(
     CipherCentralBank,
-    [sbaAddress, complianceAddress, blocksPerMonth, deployer.address],
+    ["CipherSBA Bills", "CSBA", sbaAddress, complianceAddress, blocksPerMonth, deployer.address],
     "CipherCentralBank",
   );
   console.log(
     `${deployedBank ? "✅" : "♻️"} CipherCentralBank: ${bankAddress} (${deployedBank ? "deployed" : "reused"})\n`,
+  );
+
+  // 5) Daily CipherCentralBank
+  console.log("📋 Deploying Daily CipherCentralBank...");
+  const blocksPerDay = 7_200; // ~1 day on Sepolia
+  const {
+    contract: dailyBank,
+    address: dailyBankAddress,
+    deployed: deployedDailyBank,
+  } = await deployCreate2OrReuse(
+    CipherCentralBank,
+    ["Daily CipherSBA Bills", "DCSBA", sbaAddress, complianceAddress, blocksPerDay, deployer.address],
+    "DailyCipherCentralBank",
+  );
+  console.log(
+    `${deployedDailyBank ? "✅" : "♻️"} Daily CipherCentralBank: ${dailyBankAddress} (${deployedDailyBank ? "deployed" : "reused"})\n`,
   );
 
   console.log("🔧 Wiring permissions (mirrors integration tests)...");
@@ -121,7 +137,12 @@ async function main() {
       gasLimit: 800_000,
     })
   ).wait();
-  console.log("✅ Authorized SBA + bank on ComplianceRules");
+  await (
+    await complianceRules.setAuthorizedCaller(dailyBankAddress, true, {
+      gasLimit: 800_000,
+    })
+  ).wait();
+  console.log("✅ Authorized SBA + monthly bank + daily bank on ComplianceRules");
 
   await (
     await identityRegistry.setDefaultAccessGrantee(complianceAddress, {
@@ -152,7 +173,26 @@ async function main() {
       gasLimit: 800_000,
     })
   ).wait();
-  console.log("✅ Set central bank controller + bank as minter\n");
+  await (
+    await sba.setMinter(dailyBankAddress, true, {
+      gasLimit: 800_000,
+    })
+  ).wait();
+  if ((await dailyBank.monthlyRateBps()) !== 1n) {
+    await (
+      await dailyBank.setMonthlyRateBps(1, {
+        gasLimit: 800_000,
+      })
+    ).wait();
+  }
+  if ((await bank.monthlyRateBps()) !== 30n) {
+    await (
+      await bank.setMonthlyRateBps(30, {
+        gasLimit: 800_000,
+      })
+    ).wait();
+  }
+  console.log("✅ Set controller, minters, and monthly/daily rates\n");
 
   console.log("✅ Deployment complete");
   console.log("📄 Contracts");
@@ -160,6 +200,7 @@ async function main() {
   console.log(`- ComplianceRules:    ${complianceAddress}`);
   console.log(`- CompliantUBI (SBA): ${sbaAddress}`);
   console.log(`- CipherCentralBank:  ${bankAddress}`);
+  console.log(`- DailyCipherCentralBank: ${dailyBankAddress}`);
   console.log("");
 }
 

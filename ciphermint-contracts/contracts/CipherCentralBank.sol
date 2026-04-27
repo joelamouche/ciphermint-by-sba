@@ -49,13 +49,21 @@ contract CipherCentralBank is CompliantERC20 {
 
     /**
      * @notice Construct the central bank vault token
+     * @param tokenName ERC20 display name for vault share token
+     * @param tokenSymbol ERC20 symbol for vault share token
      * @param sba_ SBA token
      * @param checker Compliance checker for CSBA
      * @param blocksPerMonth_ Blocks per month for compounding steps
      * @param initialOwner Owner address for admin operations
      */
-    constructor(address sba_, address checker, uint64 blocksPerMonth_, address initialOwner)
-        CompliantERC20("CipherSBA Bills", "CSBA", checker, initialOwner)
+    constructor(
+        string memory tokenName,
+        string memory tokenSymbol,
+        address sba_,
+        address checker,
+        uint64 blocksPerMonth_,
+        address initialOwner
+    ) CompliantERC20(tokenName, tokenSymbol, checker, initialOwner)
     {
         SBA = CompliantUBI(sba_);
         if (sba_ == address(0)) revert ZeroOwner();

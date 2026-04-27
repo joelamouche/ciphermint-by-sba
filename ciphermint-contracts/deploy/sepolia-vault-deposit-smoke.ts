@@ -100,7 +100,7 @@ async function assertAddressesMatchCurrentCreate2Prediction(params: {
   );
   const predictedBank = await predictCreate2Address(
     "CipherCentralBank",
-    [predictedUbi, predictedCompliance, 216_000, deployerAddress],
+    ["CipherSBA Bills", "CSBA", predictedUbi, predictedCompliance, 216_000, deployerAddress],
     "CipherCentralBank",
   );
 

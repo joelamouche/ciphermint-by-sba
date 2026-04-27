@@ -3,6 +3,7 @@ import { useAccount, useChainId, useSignMessage } from "wagmi";
 import {
   API_BASE_URL,
   CIPHER_CENTRAL_BANK_ADDRESS,
+  DAILY_CIPHER_CENTRAL_BANK_ADDRESS,
   COMPLIANT_ERC20_ADDRESS,
   IDENTITY_REGISTRY_ADDRESS,
 } from "./config";
@@ -67,8 +68,12 @@ export default function App() {
   const [transferAmount, setTransferAmount] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawRequestAmount, setWithdrawRequestAmount] = useState("");
+  const [dailyDepositAmount, setDailyDepositAmount] = useState("");
+  const [dailyWithdrawRequestAmount, setDailyWithdrawRequestAmount] = useState("");
   const [copied, setCopied] = useState(false);
-  const [activePage, setActivePage] = useState<"ubi" | "vault" | "about">(
+  const [activePage, setActivePage] = useState<
+    "ubi" | "vault" | "vaultDaily" | "about"
+  >(
     "ubi"
   );
   const [kycPollingEnabled, setKycPollingEnabled] = useState(false);
@@ -80,6 +85,7 @@ export default function App() {
   const identityReady = Boolean(IDENTITY_REGISTRY_ADDRESS);
   const tokenReady = Boolean(COMPLIANT_ERC20_ADDRESS);
   const vaultReady = Boolean(CIPHER_CENTRAL_BANK_ADDRESS);
+  const dailyVaultReady = Boolean(DAILY_CIPHER_CENTRAL_BANK_ADDRESS);
 
   const { isAttested, refetchAttested } = useIdentityStatus({ address });
 
@@ -141,6 +147,23 @@ export default function App() {
       return null;
     }
   }, [withdrawRequestAmount]);
+  const parsedDailyDepositAmount = useMemo(() => {
+    try {
+      return dailyDepositAmount.trim() ? parseTokenAmount(dailyDepositAmount) : null;
+    } catch {
+      return null;
+    }
+  }, [dailyDepositAmount]);
+
+  const parsedDailyWithdrawAmount = useMemo(() => {
+    try {
+      return dailyWithdrawRequestAmount.trim()
+        ? parseTokenAmount(dailyWithdrawRequestAmount)
+        : null;
+    } catch {
+      return null;
+    }
+  }, [dailyWithdrawRequestAmount]);
 
   const depositExceeded =
     parsedDepositAmount != null &&
@@ -277,12 +300,36 @@ export default function App() {
     vaultStatus,
   } = useVaultData({
     userAddress: address,
+    bankAddress: CIPHER_CENTRAL_BANK_ADDRESS,
+    setError,
+  });
+  const {
+    csbaBalance: dcsbaBalance,
+    pendingRequests: dailyPendingRequests,
+    maturedRequestIndices: dailyMaturedRequestIndices,
+    pendingActive: dailyPendingActive,
+    blocksPerMonth: dailyBlocksPerMonth,
+    sharePriceScaled: dailySharePriceScaled,
+    monthlyRateBps: dailyRateBps,
+    refreshVaultData: refreshDailyVaultData,
+    vaultStatus: dailyVaultStatus,
+  } = useVaultData({
+    userAddress: address,
+    bankAddress: DAILY_CIPHER_CENTRAL_BANK_ADDRESS,
     setError,
   });
   const withdrawExceeded =
     parsedWithdrawAmount != null &&
     csbaBalance != null &&
     parsedWithdrawAmount > csbaBalance;
+  const dailyDepositExceeded =
+    parsedDailyDepositAmount != null &&
+    balance != null &&
+    parsedDailyDepositAmount > balance;
+  const dailyWithdrawExceeded =
+    parsedDailyWithdrawAmount != null &&
+    dcsbaBalance != null &&
+    parsedDailyWithdrawAmount > dcsbaBalance;
 
   const {
     deposit,
@@ -294,6 +341,7 @@ export default function App() {
     completeState,
   } = useVaultActions({
     userAddress: address,
+    bankAddress: CIPHER_CENTRAL_BANK_ADDRESS,
     setError,
     onSuccess: async (action) => {
       if (action === "deposit") {
@@ -302,6 +350,26 @@ export default function App() {
         return;
       }
       await refreshVaultData();
+    },
+  });
+  const {
+    deposit: depositDaily,
+    requestWithdraw: requestWithdrawDaily,
+    completeWithdraw: completeWithdrawDaily,
+    completeWithdrawMany: completeWithdrawManyDaily,
+    depositState: dailyDepositState,
+    requestState: dailyRequestState,
+    completeState: dailyCompleteState,
+  } = useVaultActions({
+    userAddress: address,
+    bankAddress: DAILY_CIPHER_CENTRAL_BANK_ADDRESS,
+    setError,
+    onSuccess: async (action) => {
+      if (action === "deposit") {
+        await Promise.all([refreshDailyVaultData(), handleRefreshBalance()]);
+        return;
+      }
+      await refreshDailyVaultData();
     },
   });
 
@@ -336,10 +404,47 @@ export default function App() {
   async function handleVaultCompleteMatured() {
     await completeWithdrawMany(maturedRequestIndices);
   }
+  async function handleDailyVaultDeposit() {
+    if (
+      parsedDailyDepositAmount != null &&
+      balance != null &&
+      parsedDailyDepositAmount > balance
+    ) {
+      setError("Deposit amount exceeds your available SBA balance.");
+      return;
+    }
+    await depositDaily(dailyDepositAmount);
+  }
+
+  async function handleDailyVaultRequestWithdraw() {
+    if (
+      parsedDailyWithdrawAmount != null &&
+      dcsbaBalance != null &&
+      parsedDailyWithdrawAmount > dcsbaBalance
+    ) {
+      setError("Withdrawal request exceeds your available DCSBA balance.");
+      return;
+    }
+    await requestWithdrawDaily(dailyWithdrawRequestAmount);
+  }
+
+  async function handleDailyVaultCompleteWithdraw(requestIndex: number) {
+    await completeWithdrawDaily(requestIndex);
+  }
+
+  async function handleDailyVaultCompleteMatured() {
+    await completeWithdrawManyDaily(dailyMaturedRequestIndices);
+  }
 
   useEffect(() => {
-    if (!isConnected || activePage !== "vault") return;
-    refreshVaultData();
+    if (!isConnected) return;
+    if (activePage === "vault") {
+      refreshVaultData();
+      return;
+    }
+    if (activePage === "vaultDaily") {
+      refreshDailyVaultData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, activePage, address]);
 
@@ -425,6 +530,14 @@ export default function App() {
           </button>
           <button
             type="button"
+            className={`nav-link ${activePage === "vaultDaily" ? "active" : ""}`}
+            onClick={() => setActivePage("vaultDaily")}
+            disabled={!dailyVaultReady}
+          >
+            Daily Central Bank Vault
+          </button>
+          <button
+            type="button"
             className={`nav-link ${activePage === "about" ? "active" : ""}`}
             onClick={() => setActivePage("about")}
           >
@@ -470,9 +583,13 @@ export default function App() {
                   onTransfer={handleTransfer}
                 />
               </>
-            ) : (
+            ) : activePage === "vault" ? (
               <>
                 <VaultActionPanel
+                  title="Central Bank Vault"
+                  description="Deposit SBA into the monthly vault for CSBA shares, request withdrawal, then complete after the monthly lock period."
+                  shareSymbol="CSBA"
+                  baseSymbol="SBA"
                   isConnected={isConnected}
                   isAttested={Boolean(isAttested)}
                   sbaBalance={balance}
@@ -486,14 +603,22 @@ export default function App() {
                   depositStatus={depositState.status}
                   depositConfirmationsRemaining={depositState.confirmationsRemaining}
                   depositPhase={depositState.phase}
+                  depositStepLabel={depositState.stepLabel}
                   requestStatus={requestState.status}
                   requestConfirmationsRemaining={requestState.confirmationsRemaining}
                   requestPhase={requestState.phase}
+                  requestStepLabel={requestState.stepLabel}
                   hasPendingWithdraw={pendingActive}
                   depositExceeded={depositExceeded}
                   withdrawExceeded={withdrawExceeded}
                 />
                 <VaultWithdrawalsPanel
+                  title="Vault Withdrawals"
+                  description="Each withdrawal request creates one position. Positions unlock independently after the monthly lock and can be completed one-by-one or in batch."
+                  shareSymbol="CSBA"
+                  baseSymbol="SBA"
+                  unlockUnitLabel="month"
+                  unlockUnitDays={30}
                   vaultStatus={vaultStatus}
                   onRefreshVault={refreshVaultData}
                   pendingRequests={pendingRequests}
@@ -503,6 +628,59 @@ export default function App() {
                   completeConfirmationsRemaining={completeState.confirmationsRemaining}
                   onCompleteRequest={handleVaultCompleteWithdraw}
                   onCompleteMatured={handleVaultCompleteMatured}
+                />
+              </>
+            ) : (
+              <>
+                <VaultActionPanel
+                  title="Daily Central Bank Vault"
+                  description="Deposit SBA into the daily vault for DCSBA shares, request withdrawal, then complete after the daily lock period."
+                  shareSymbol="DCSBA"
+                  baseSymbol="SBA"
+                  isConnected={isConnected}
+                  isAttested={Boolean(isAttested)}
+                  sbaBalance={balance}
+                  csbaBalance={dcsbaBalance}
+                  depositAmount={dailyDepositAmount}
+                  withdrawAmount={dailyWithdrawRequestAmount}
+                  onDepositAmountChange={setDailyDepositAmount}
+                  onWithdrawAmountChange={setDailyWithdrawRequestAmount}
+                  onDeposit={handleDailyVaultDeposit}
+                  onRequestWithdraw={handleDailyVaultRequestWithdraw}
+                  depositStatus={dailyDepositState.status}
+                  depositConfirmationsRemaining={
+                    dailyDepositState.confirmationsRemaining
+                  }
+                  depositPhase={dailyDepositState.phase}
+                  depositStepLabel={dailyDepositState.stepLabel}
+                  requestStatus={dailyRequestState.status}
+                  requestConfirmationsRemaining={
+                    dailyRequestState.confirmationsRemaining
+                  }
+                  requestPhase={dailyRequestState.phase}
+                  requestStepLabel={dailyRequestState.stepLabel}
+                  hasPendingWithdraw={dailyPendingActive}
+                  depositExceeded={dailyDepositExceeded}
+                  withdrawExceeded={dailyWithdrawExceeded}
+                />
+                <VaultWithdrawalsPanel
+                  title="Daily Vault Withdrawals"
+                  description="Each withdrawal request creates one daily position. Positions unlock independently and can be completed one-by-one or in batch."
+                  shareSymbol="DCSBA"
+                  baseSymbol="SBA"
+                  unlockUnitLabel="day"
+                  unlockUnitDays={1}
+                  vaultStatus={dailyVaultStatus}
+                  onRefreshVault={refreshDailyVaultData}
+                  pendingRequests={dailyPendingRequests}
+                  blocksPerMonth={dailyBlocksPerMonth}
+                  completeStatus={dailyCompleteState.status}
+                  completePhase={dailyCompleteState.phase}
+                  completeConfirmationsRemaining={
+                    dailyCompleteState.confirmationsRemaining
+                  }
+                  onCompleteRequest={handleDailyVaultCompleteWithdraw}
+                  onCompleteMatured={handleDailyVaultCompleteMatured}
                 />
               </>
             )}
@@ -546,14 +724,46 @@ export default function App() {
                   onRefreshTvs={refetchTotalValueShielded}
                 />
               </>
-            ) : (
+            ) : activePage === "vault" ? (
               <>
                 <VaultInfoCard
+                  title="Vault Overview"
+                  description="Your CSBA position and expected monthly return."
+                  shareSymbol="CSBA"
+                  baseSymbol="SBA"
+                  roiLabel="Monthly ROI"
                   vaultStatus={vaultStatus}
                   onRefreshVault={refreshVaultData}
                   csbaBalance={csbaBalance}
                   sharePriceScaled={sharePriceScaled}
                   monthlyRateBps={monthlyRateBps}
+                />
+                <BalanceCard
+                  balance={balance}
+                  isBalanceEncrypted={isBalanceEncrypted}
+                  balanceStatus={balanceStatus}
+                  onRefreshBalance={handleRefreshBalance}
+                  claimableIncome={claimableIncome}
+                  claimableIncomeStatus={claimableIncomeStatus}
+                  claimMonthlyStatus={claimMonthlyStatus}
+                  claimMonthlyConfirmationsRemaining={incomeConfirmationsRemaining}
+                  onRefreshIncome={refetchClaimableIncome}
+                  onClaimIncome={handleClaimMonthlyIncome}
+                />
+              </>
+            ) : (
+              <>
+                <VaultInfoCard
+                  title="Daily Vault Overview"
+                  description="Your DCSBA position and expected daily return."
+                  shareSymbol="DCSBA"
+                  baseSymbol="SBA"
+                  roiLabel="Daily ROI"
+                  vaultStatus={dailyVaultStatus}
+                  onRefreshVault={refreshDailyVaultData}
+                  csbaBalance={dcsbaBalance}
+                  sharePriceScaled={dailySharePriceScaled}
+                  monthlyRateBps={dailyRateBps}
                 />
                 <BalanceCard
                   balance={balance}

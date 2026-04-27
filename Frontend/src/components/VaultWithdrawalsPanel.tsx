@@ -3,6 +3,12 @@ import type { PendingVaultRequest } from "../hooks/useVaultData";
 import { formatTokenAmount } from "../lib/tokenFormat";
 
 interface VaultWithdrawalsPanelProps {
+  title: string;
+  description: string;
+  shareSymbol: string;
+  baseSymbol: string;
+  unlockUnitLabel: string;
+  unlockUnitDays: number;
   vaultStatus: Status;
   onRefreshVault: () => void;
   pendingRequests: PendingVaultRequest[];
@@ -15,6 +21,12 @@ interface VaultWithdrawalsPanelProps {
 }
 
 export function VaultWithdrawalsPanel({
+  title,
+  description,
+  shareSymbol,
+  baseSymbol,
+  unlockUnitLabel,
+  unlockUnitDays,
   vaultStatus,
   onRefreshVault,
   pendingRequests,
@@ -34,7 +46,7 @@ export function VaultWithdrawalsPanel({
       const roundedMonths = Math.round(months * 10) / 10;
       return `${roundedMonths} month${roundedMonths === 1 ? "" : "s"}`;
     }
-    const days = months * 30;
+    const days = months * unlockUnitDays;
     if (days >= 1) {
       const roundedDays = Math.max(1, Math.round(days));
       return `${roundedDays} day${roundedDays === 1 ? "" : "s"}`;
@@ -45,11 +57,8 @@ export function VaultWithdrawalsPanel({
 
   return (
     <section className="card">
-      <h2>Vault Withdrawals</h2>
-      <p className="muted">
-        Each withdrawal request creates one position. Positions unlock independently
-        after the lock period and can be completed one-by-one or in batch.
-      </p>
+      <h2>{title}</h2>
+      <p className="muted">{description}</p>
 
       <div className="status-row">
         <span>Refresh withdrawal positions</span>
@@ -71,6 +80,29 @@ export function VaultWithdrawalsPanel({
         <div>
           <span>Matured positions</span>
           <strong>{maturedCount}</strong>
+        </div>
+      </div>
+      <div className="status-grid">
+        <div>
+          <span>Total pending unlock ({shareSymbol})</span>
+          <strong>
+            {formatTokenAmount(
+              pendingRequests.reduce((acc, request) => acc + request.amountCsba, 0n),
+            )}{" "}
+            {shareSymbol}
+          </strong>
+        </div>
+        <div>
+          <span>Total pending value (est. {baseSymbol})</span>
+          <strong>
+            {formatTokenAmount(
+              pendingRequests.reduce(
+                (acc, request) => acc + request.amountSbaEstimate,
+                0n,
+              ),
+            )}{" "}
+            {baseSymbol}
+          </strong>
         </div>
       </div>
 
@@ -120,19 +152,19 @@ export function VaultWithdrawalsPanel({
                         );
                         const blocksLabel = `${request.blocksUntilUnlock.toLocaleString()} blocks`;
                         return approxUnlock
-                          ? `${blocksLabel} (~${approxUnlock}) to unlock`
+                          ? `${blocksLabel} (~${approxUnlock} ${unlockUnitLabel} window) to unlock`
                           : `${blocksLabel} to unlock`;
                       })()}
                 </span>
               </div>
               <div className="vault-position-metrics">
                 <div>
-                  <span>Locked CSBA</span>
-                  <strong>{formatTokenAmount(request.amountCsba)} CSBA</strong>
+                  <span>Locked {shareSymbol}</span>
+                  <strong>{formatTokenAmount(request.amountCsba)} {shareSymbol}</strong>
                 </div>
                 <div>
-                  <span>SBA value (est.)</span>
-                  <strong>{formatTokenAmount(request.amountSbaEstimate)} SBA</strong>
+                  <span>{baseSymbol} value (est.)</span>
+                  <strong>{formatTokenAmount(request.amountSbaEstimate)} {baseSymbol}</strong>
                 </div>
                 <div>
                   <span>Unlock block</span>

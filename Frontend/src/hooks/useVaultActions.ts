@@ -5,7 +5,6 @@ import type { Status } from "../App";
 import { cipherCentralBankAbi } from "../abis/cipherCentralBank";
 import { compliantErc20Abi } from "../abis/compliantErc20";
 import {
-  CIPHER_CENTRAL_BANK_ADDRESS,
   COMPLIANT_UBI_ADDRESS,
   TX_CONFIRMATIONS_REQUIRED,
 } from "../config";
@@ -14,6 +13,7 @@ import { parseTokenAmount } from "../lib/tokenFormat";
 
 interface UseVaultActionsParams {
   userAddress?: `0x${string}`;
+  bankAddress?: `0x${string}`;
   setError: (message: string | null) => void;
   onSuccess?: (
     action:
@@ -28,6 +28,7 @@ interface ActionState {
   status: Status;
   confirmationsRemaining: number | null;
   phase: "idle" | "encrypting" | "signing" | "confirming";
+  stepLabel: string | null;
 }
 
 const REQUIRED_CONFIRMATIONS = TX_CONFIRMATIONS_REQUIRED;
@@ -50,6 +51,7 @@ function normalizeHex(value: unknown): Hex | null {
 
 export function useVaultActions({
   userAddress,
+  bankAddress,
   setError,
   onSuccess,
 }: UseVaultActionsParams) {
@@ -59,24 +61,33 @@ export function useVaultActions({
     status: "idle",
     confirmationsRemaining: null,
     phase: "idle",
+    stepLabel: null,
   });
   const [requestState, setRequestState] = useState<ActionState>({
     status: "idle",
     confirmationsRemaining: null,
     phase: "idle",
+    stepLabel: null,
   });
   const [completeState, setCompleteState] = useState<ActionState>({
     status: "idle",
     confirmationsRemaining: null,
     phase: "idle",
+    stepLabel: null,
   });
 
   const waitForConfirmations = async (
     hash: `0x${string}`,
-    setState: (next: ActionState) => void
+    setState: (next: ActionState) => void,
+    stepLabel: string
   ) => {
     if (!publicClient) {
-      setState({ status: "success", confirmationsRemaining: null, phase: "idle" });
+      setState({
+        status: "success",
+        confirmationsRemaining: null,
+        phase: "idle",
+        stepLabel: null,
+      });
       return;
     }
     const receipt = await publicClient.waitForTransactionReceipt({
@@ -93,17 +104,18 @@ export function useVaultActions({
         status: "confirming",
         confirmationsRemaining: remaining,
         phase: "confirming",
+        stepLabel,
       });
       if (remaining <= 0) break;
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
-    setState({ status: "success", confirmationsRemaining: null, phase: "idle" });
+    setState({ status: "success", confirmationsRemaining: null, phase: "idle", stepLabel: null });
   };
 
   const deposit = async (rawAmount: string) => {
     setError(null);
     try {
-      if (!userAddress || !COMPLIANT_UBI_ADDRESS || !CIPHER_CENTRAL_BANK_ADDRESS) {
+      if (!userAddress || !COMPLIANT_UBI_ADDRESS || !bankAddress) {
         throw new Error("Wallet, SBA address, or bank address is not configured.");
       }
       const amount = parseTokenAmount(rawAmount);
@@ -114,6 +126,7 @@ export function useVaultActions({
         status: "loading",
         confirmationsRemaining: null,
         phase: "encrypting",
+        stepLabel: "Step 1/2: Encrypting approval input...",
       });
 
       const approvedAmount = await encryptUint64(COMPLIANT_UBI_ADDRESS, userAddress, amount);
@@ -126,27 +139,34 @@ export function useVaultActions({
         status: "loading",
         confirmationsRemaining: null,
         phase: "signing",
+        stepLabel: "Step 1/2: Approve SBA spending in your wallet.",
       });
       const approveHash = await writeContractAsync({
         address: COMPLIANT_UBI_ADDRESS,
         abi: compliantErc20Abi,
         functionName: "approve",
-        args: [CIPHER_CENTRAL_BANK_ADDRESS, approveHandle, approveProof],
+        args: [bankAddress, approveHandle, approveProof],
       });
       setDepositState({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
         phase: "confirming",
+        stepLabel: "Step 1/2: Waiting for approval confirmations...",
       });
-      await waitForConfirmations(approveHash, setDepositState);
+      await waitForConfirmations(
+        approveHash,
+        setDepositState,
+        "Step 1/2: Waiting for approval confirmations...",
+      );
 
       setDepositState({
         status: "loading",
         confirmationsRemaining: null,
         phase: "encrypting",
+        stepLabel: "Step 2/2: Encrypting deposit input...",
       });
       const depositAmount = await encryptUint64(
-        CIPHER_CENTRAL_BANK_ADDRESS,
+        bankAddress,
         userAddress,
         amount
       );
@@ -159,9 +179,10 @@ export function useVaultActions({
         status: "loading",
         confirmationsRemaining: null,
         phase: "signing",
+        stepLabel: "Step 2/2: Confirm deposit in your wallet.",
       });
       const depositHash = await writeContractAsync({
-        address: CIPHER_CENTRAL_BANK_ADDRESS,
+        address: bankAddress,
         abi: cipherCentralBankAbi,
         functionName: "deposit",
         args: [depositHandle, depositProof],
@@ -170,11 +191,21 @@ export function useVaultActions({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
         phase: "confirming",
+        stepLabel: "Step 2/2: Waiting for deposit confirmations...",
       });
-      await waitForConfirmations(depositHash, setDepositState);
+      await waitForConfirmations(
+        depositHash,
+        setDepositState,
+        "Step 2/2: Waiting for deposit confirmations...",
+      );
       await onSuccess?.("deposit");
     } catch (err) {
-      setDepositState({ status: "error", confirmationsRemaining: null, phase: "idle" });
+      setDepositState({
+        status: "error",
+        confirmationsRemaining: null,
+        phase: "idle",
+        stepLabel: null,
+      });
       setError(err instanceof Error ? err.message : "Vault deposit failed.");
     }
   };
@@ -182,7 +213,7 @@ export function useVaultActions({
   const requestWithdraw = async (rawAmount: string) => {
     setError(null);
     try {
-      if (!userAddress || !CIPHER_CENTRAL_BANK_ADDRESS) {
+      if (!userAddress || !bankAddress) {
         throw new Error("Wallet or bank address is not configured.");
       }
       const amount = parseTokenAmount(rawAmount);
@@ -193,8 +224,9 @@ export function useVaultActions({
         status: "loading",
         confirmationsRemaining: null,
         phase: "encrypting",
+        stepLabel: "Encrypting withdraw request input...",
       });
-      const encrypted = await encryptUint64(CIPHER_CENTRAL_BANK_ADDRESS, userAddress, amount);
+      const encrypted = await encryptUint64(bankAddress, userAddress, amount);
       const handle = normalizeHex(encrypted.handle);
       const proof = normalizeHex(encrypted.inputProof);
       if (!handle || !proof) {
@@ -204,9 +236,10 @@ export function useVaultActions({
         status: "loading",
         confirmationsRemaining: null,
         phase: "signing",
+        stepLabel: "Confirm withdraw request in your wallet.",
       });
       const hash = await writeContractAsync({
-        address: CIPHER_CENTRAL_BANK_ADDRESS,
+        address: bankAddress,
         abi: cipherCentralBankAbi,
         functionName: "requestWithdraw",
         args: [handle, proof],
@@ -215,11 +248,21 @@ export function useVaultActions({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
         phase: "confirming",
+        stepLabel: "Waiting for withdraw request confirmations...",
       });
-      await waitForConfirmations(hash, setRequestState);
+      await waitForConfirmations(
+        hash,
+        setRequestState,
+        "Waiting for withdraw request confirmations...",
+      );
       await onSuccess?.("requestWithdraw");
     } catch (err) {
-      setRequestState({ status: "error", confirmationsRemaining: null, phase: "idle" });
+      setRequestState({
+        status: "error",
+        confirmationsRemaining: null,
+        phase: "idle",
+        stepLabel: null,
+      });
       setError(err instanceof Error ? err.message : "Withdraw request failed.");
     }
   };
@@ -227,7 +270,7 @@ export function useVaultActions({
   const completeWithdraw = async (requestIndex: number) => {
     setError(null);
     try {
-      if (!CIPHER_CENTRAL_BANK_ADDRESS) {
+      if (!bankAddress) {
         throw new Error("Bank address is not configured.");
       }
       if (!Number.isInteger(requestIndex) || requestIndex < 0) {
@@ -237,9 +280,10 @@ export function useVaultActions({
         status: "loading",
         confirmationsRemaining: null,
         phase: "signing",
+        stepLabel: "Confirm complete withdraw in your wallet.",
       });
       const hash = await writeContractAsync({
-        address: CIPHER_CENTRAL_BANK_ADDRESS,
+        address: bankAddress,
         abi: cipherCentralBankAbi,
         functionName: "completeWithdraw",
         args: [BigInt(requestIndex)],
@@ -248,11 +292,21 @@ export function useVaultActions({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
         phase: "confirming",
+        stepLabel: "Waiting for complete withdraw confirmations...",
       });
-      await waitForConfirmations(hash, setCompleteState);
+      await waitForConfirmations(
+        hash,
+        setCompleteState,
+        "Waiting for complete withdraw confirmations...",
+      );
       await onSuccess?.("completeWithdraw");
     } catch (err) {
-      setCompleteState({ status: "error", confirmationsRemaining: null, phase: "idle" });
+      setCompleteState({
+        status: "error",
+        confirmationsRemaining: null,
+        phase: "idle",
+        stepLabel: null,
+      });
       setError(err instanceof Error ? err.message : "Complete withdraw failed.");
     }
   };
@@ -260,7 +314,7 @@ export function useVaultActions({
   const completeWithdrawMany = async (requestIndices: number[]) => {
     setError(null);
     try {
-      if (!CIPHER_CENTRAL_BANK_ADDRESS) {
+      if (!bankAddress) {
         throw new Error("Bank address is not configured.");
       }
       if (!requestIndices.length) {
@@ -276,9 +330,10 @@ export function useVaultActions({
         status: "loading",
         confirmationsRemaining: null,
         phase: "signing",
+        stepLabel: "Confirm batch completion in your wallet.",
       });
       const hash = await writeContractAsync({
-        address: CIPHER_CENTRAL_BANK_ADDRESS,
+        address: bankAddress,
         abi: cipherCentralBankAbi,
         functionName: "completeWithdrawMany",
         args: [normalized],
@@ -287,11 +342,21 @@ export function useVaultActions({
         status: "confirming",
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
         phase: "confirming",
+        stepLabel: "Waiting for batch completion confirmations...",
       });
-      await waitForConfirmations(hash, setCompleteState);
+      await waitForConfirmations(
+        hash,
+        setCompleteState,
+        "Waiting for batch completion confirmations...",
+      );
       await onSuccess?.("completeWithdrawMany");
     } catch (err) {
-      setCompleteState({ status: "error", confirmationsRemaining: null, phase: "idle" });
+      setCompleteState({
+        status: "error",
+        confirmationsRemaining: null,
+        phase: "idle",
+        stepLabel: null,
+      });
       setError(err instanceof Error ? err.message : "Batch complete withdraw failed.");
     }
   };

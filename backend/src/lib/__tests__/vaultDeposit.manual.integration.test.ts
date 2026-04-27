@@ -114,7 +114,14 @@ async function assertAddressesMatchCurrentCreate2Prediction(params: {
 
   const predictedBank = (await predictCreate2AddressFromArtifact({
     artifactPath: resolve(contractsRoot, "artifacts/contracts/CipherCentralBank.sol/CipherCentralBank.json"),
-    constructorArgs: [predictedUbi, predictedCompliance, 216_000, params.deployerAddress],
+    constructorArgs: [
+      "CipherSBA Bills",
+      "CSBA",
+      predictedUbi,
+      predictedCompliance,
+      216_000,
+      params.deployerAddress,
+    ],
     saltLabel: "CipherCentralBank",
   })) as string;
 

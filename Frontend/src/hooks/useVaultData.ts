@@ -8,7 +8,6 @@ import {
 } from "wagmi";
 import type { Status } from "../App";
 import { cipherCentralBankAbi } from "../abis/cipherCentralBank";
-import { CIPHER_CENTRAL_BANK_ADDRESS } from "../config";
 import { userDecryptEuint64 } from "../lib/fhevm";
 import { loadCachedBigint, saveCachedBigint } from "../lib/stateCache";
 
@@ -24,10 +23,15 @@ export interface PendingVaultRequest {
 
 interface UseVaultDataParams {
   userAddress?: `0x${string}`;
+  bankAddress?: `0x${string}`;
   setError: (message: string | null) => void;
 }
 
-export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
+export function useVaultData({
+  userAddress,
+  bankAddress,
+  setError,
+}: UseVaultDataParams) {
   const { signTypedDataAsync } = useSignTypedData();
   const publicClient = usePublicClient();
   const [csbaBalance, setCsbaBalance] = useState<bigint | null>(null);
@@ -37,48 +41,48 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
   const csbaBalanceKey = userAddress ? `ciphermint-csba-balance-${userAddress}` : null;
 
   const { data: sharePriceScaled, refetch: refetchSharePrice } = useReadContract({
-    address: CIPHER_CENTRAL_BANK_ADDRESS,
+    address: bankAddress,
     abi: cipherCentralBankAbi,
     functionName: "sharePriceScaled",
-    query: { enabled: Boolean(CIPHER_CENTRAL_BANK_ADDRESS) },
+    query: { enabled: Boolean(bankAddress) },
   });
 
   const { data: monthlyRateBps, refetch: refetchMonthlyRate } = useReadContract({
-    address: CIPHER_CENTRAL_BANK_ADDRESS,
+    address: bankAddress,
     abi: cipherCentralBankAbi,
     functionName: "monthlyRateBps",
-    query: { enabled: Boolean(CIPHER_CENTRAL_BANK_ADDRESS) },
+    query: { enabled: Boolean(bankAddress) },
   });
 
   const { data: blocksPerMonth, refetch: refetchBlocksPerMonth } = useReadContract({
-    address: CIPHER_CENTRAL_BANK_ADDRESS,
+    address: bankAddress,
     abi: cipherCentralBankAbi,
     functionName: "BLOCKS_PER_MONTH",
-    query: { enabled: Boolean(CIPHER_CENTRAL_BANK_ADDRESS) },
+    query: { enabled: Boolean(bankAddress) },
   });
 
   const { refetch: refetchPendingCount } = useReadContract({
-    address: CIPHER_CENTRAL_BANK_ADDRESS,
+    address: bankAddress,
     abi: cipherCentralBankAbi,
     functionName: "getPendingWithdrawCount",
     args: userAddress ? [userAddress] : undefined,
-    query: { enabled: Boolean(CIPHER_CENTRAL_BANK_ADDRESS && userAddress) },
+    query: { enabled: Boolean(bankAddress && userAddress) },
   });
 
   const { data: currentBlock } = useBlockNumber({ watch: true });
 
   // Read encrypted handles using normal hooks, decrypt through mutation.
   const { refetch: refetchBalanceHandle } = useReadContract({
-    address: CIPHER_CENTRAL_BANK_ADDRESS,
+    address: bankAddress,
     abi: cipherCentralBankAbi,
     functionName: "balanceOf",
     args: userAddress ? [userAddress] : undefined,
-    query: { enabled: Boolean(CIPHER_CENTRAL_BANK_ADDRESS && userAddress) },
+    query: { enabled: Boolean(bankAddress && userAddress) },
   });
 
   const decryptMutation = useMutation({
     mutationFn: async () => {
-      if (!userAddress || !CIPHER_CENTRAL_BANK_ADDRESS) {
+      if (!userAddress || !bankAddress) {
         throw new Error("Connect your wallet and configure CipherCentralBank address.");
       }
       if (!publicClient) {
@@ -100,7 +104,7 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
       } else {
         const decryptedBalance = await userDecryptEuint64({
           encryptedValue: csbaHandle,
-          contractAddress: CIPHER_CENTRAL_BANK_ADDRESS,
+          contractAddress: bankAddress,
           userAddress,
           signTypedDataAsync,
         });
@@ -117,7 +121,7 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
 
       for (let i = 0; i < pendingCount; i += 1) {
         const tuple = (await publicClient.readContract({
-          address: CIPHER_CENTRAL_BANK_ADDRESS,
+          address: bankAddress,
           abi: cipherCentralBankAbi,
           functionName: "getPendingWithdraw",
           args: [userAddress, BigInt(i)],
@@ -127,7 +131,7 @@ export function useVaultData({ userAddress, setError }: UseVaultDataParams) {
 
         const decryptedPending = await userDecryptEuint64({
           encryptedValue: tuple[0],
-          contractAddress: CIPHER_CENTRAL_BANK_ADDRESS,
+          contractAddress: bankAddress,
           userAddress,
           signTypedDataAsync,
         });

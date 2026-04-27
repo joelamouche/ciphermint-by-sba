@@ -2,6 +2,10 @@ import type { Status } from "../App";
 import { formatTokenAmount } from "../lib/tokenFormat";
 
 interface VaultActionPanelProps {
+  title: string;
+  description: string;
+  shareSymbol: string;
+  baseSymbol: string;
   isConnected: boolean;
   isAttested: boolean;
   sbaBalance: bigint | null;
@@ -15,15 +19,21 @@ interface VaultActionPanelProps {
   depositStatus: Status;
   depositConfirmationsRemaining: number | null;
   depositPhase: "idle" | "encrypting" | "signing" | "confirming";
+  depositStepLabel: string | null;
   requestStatus: Status;
   requestConfirmationsRemaining: number | null;
   requestPhase: "idle" | "encrypting" | "signing" | "confirming";
+  requestStepLabel: string | null;
   hasPendingWithdraw: boolean;
   depositExceeded: boolean;
   withdrawExceeded: boolean;
 }
 
 export function VaultActionPanel({
+  title,
+  description,
+  shareSymbol,
+  baseSymbol,
   isConnected,
   isAttested,
   sbaBalance,
@@ -37,9 +47,11 @@ export function VaultActionPanel({
   depositStatus,
   depositConfirmationsRemaining,
   depositPhase,
+  depositStepLabel,
   requestStatus,
   requestConfirmationsRemaining,
   requestPhase,
+  requestStepLabel,
   hasPendingWithdraw,
   depositExceeded,
   withdrawExceeded,
@@ -49,14 +61,11 @@ export function VaultActionPanel({
 
   return (
     <section className="card panel">
-      <h2>Central Bank Vault</h2>
-      <p className="muted">
-        Deposit SBA into the vault for CSBA shares, request withdrawal, then complete
-        after the lock period.
-      </p>
+      <h2>{title}</h2>
+      <p className="muted">{description}</p>
 
       <label className="field">
-        <span>Deposit amount (SBA, up to 8 decimals)</span>
+        <span>Deposit amount ({baseSymbol}, up to 8 decimals)</span>
         <input
           value={depositAmount}
           onChange={(event) => onDepositAmountChange(event.target.value)}
@@ -65,12 +74,12 @@ export function VaultActionPanel({
       </label>
       <p className="muted">
         {sbaKnown
-          ? `Available SBA: ${formatTokenAmount(sbaBalance)}`
-          : "Available SBA: decrypt SBA balance first"}
+          ? `Available ${baseSymbol}: ${formatTokenAmount(sbaBalance)}`
+          : `Available ${baseSymbol}: decrypt ${baseSymbol} balance first`}
       </p>
       {depositExceeded && (
         <p className="status-warn status-center">
-          Amount exceeds available SBA balance.
+          Amount exceeds available {baseSymbol} balance.
         </p>
       )}
       <button
@@ -97,11 +106,13 @@ export function VaultActionPanel({
               ? "Deposit again"
               : depositStatus === "error"
                 ? "Retry deposit"
-                : "Deposit SBA"}
+                : `Approve ${baseSymbol} first`}
       </button>
+      {(depositStatus === "loading" || depositStatus === "confirming") &&
+        depositStepLabel && <p className="muted status-center">{depositStepLabel}</p>}
       {depositStatus === "loading" && depositPhase === "encrypting" && (
         <p className="muted status-center">
-          Encrypting SBA amount with Zama relayer...
+          Encrypting {baseSymbol} amount with Zama relayer...
         </p>
       )}
       {depositStatus === "loading" && depositPhase === "signing" && (
@@ -115,7 +126,7 @@ export function VaultActionPanel({
       )}
 
       <label className="field">
-        <span>Request withdrawal amount (CSBA, up to 8 decimals)</span>
+        <span>Request withdrawal amount ({shareSymbol}, up to 8 decimals)</span>
         <input
           value={withdrawAmount}
           onChange={(event) => onWithdrawAmountChange(event.target.value)}
@@ -124,12 +135,12 @@ export function VaultActionPanel({
       </label>
       <p className="muted">
         {csbaKnown
-          ? `Available CSBA: ${formatTokenAmount(csbaBalance)}`
-          : "Available CSBA: refresh vault data to decrypt balance"}
+          ? `Available ${shareSymbol}: ${formatTokenAmount(csbaBalance)}`
+          : `Available ${shareSymbol}: refresh vault data to decrypt balance`}
       </p>
       {withdrawExceeded && (
         <p className="status-warn status-center">
-          Amount exceeds available CSBA balance.
+          Amount exceeds available {shareSymbol} balance.
         </p>
       )}
       <button
@@ -158,9 +169,11 @@ export function VaultActionPanel({
                 ? "Retry request"
                 : "Request withdrawal"}
       </button>
+      {(requestStatus === "loading" || requestStatus === "confirming") &&
+        requestStepLabel && <p className="muted status-center">{requestStepLabel}</p>}
       {requestStatus === "loading" && requestPhase === "encrypting" && (
         <p className="muted status-center">
-          Encrypting CSBA amount with Zama relayer...
+          Encrypting {shareSymbol} amount with Zama relayer...
         </p>
       )}
       {requestStatus === "loading" && requestPhase === "signing" && (

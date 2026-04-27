@@ -13,6 +13,10 @@ export const CIPHER_CENTRAL_BANK_ADDRESS =
   (import.meta.env.VITE_CIPHER_CENTRAL_BANK_ADDRESS as
     | `0x${string}`
     | undefined) ?? undefined;
+export const DAILY_CIPHER_CENTRAL_BANK_ADDRESS =
+  (import.meta.env.VITE_DAILY_CIPHER_CENTRAL_BANK_ADDRESS as
+    | `0x${string}`
+    | undefined) ?? undefined;
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) return fallback;
