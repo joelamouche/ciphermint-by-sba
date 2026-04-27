@@ -208,6 +208,38 @@ h2 {
   margin-left: auto;
 }
 
+.vault-position-item {
+  border: 1px solid #2e2e44;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.vault-position-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vault-position-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vault-position-metrics span {
+  color: #a1a1aa;
+  font-size: 0.8rem;
+}
+
+.vault-position-metrics strong {
+  margin-top: 2px;
+}
+
 .status-good {
   color: #a7f3d0;
 }
@@ -475,5 +507,9 @@ input {
 
   .panel {
     min-height: auto;
+  }
+
+  .vault-position-metrics {
+    grid-template-columns: 1fr;
   }
 }

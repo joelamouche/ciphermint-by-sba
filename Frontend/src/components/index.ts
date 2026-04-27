@@ -7,3 +7,4 @@ export { StepperPanel } from "./StepperPanel";
 export { TvsCard } from "./TvsCard";
 export { VaultActionPanel } from "./VaultActionPanel";
 export { VaultInfoCard } from "./VaultInfoCard";
+export { VaultWithdrawalsPanel } from "./VaultWithdrawalsPanel";

@@ -17,6 +17,7 @@ import {
   TvsCard,
   VaultActionPanel,
   VaultInfoCard,
+  VaultWithdrawalsPanel,
 } from "./components";
 import { steps } from "./constants/steps";
 import {
@@ -293,9 +294,13 @@ export default function App() {
   } = useVaultActions({
     userAddress: address,
     setError,
-    onSuccess: () => {
-      refreshVaultData();
-      handleRefreshBalance();
+    onSuccess: async (action) => {
+      if (action === "deposit") {
+        // After deposit confirmation, re-decrypt both balances exactly once.
+        await Promise.all([refreshVaultData(), handleRefreshBalance()]);
+        return;
+      }
+      await refreshVaultData();
     },
   });
 
@@ -464,25 +469,35 @@ export default function App() {
                 />
               </>
             ) : (
-              <VaultActionPanel
-                isConnected={isConnected}
-                isAttested={Boolean(isAttested)}
-                sbaBalance={balance}
-                csbaBalance={csbaBalance}
-                depositAmount={depositAmount}
-                withdrawAmount={withdrawRequestAmount}
-                onDepositAmountChange={setDepositAmount}
-                onWithdrawAmountChange={setWithdrawRequestAmount}
-                onDeposit={handleVaultDeposit}
-                onRequestWithdraw={handleVaultRequestWithdraw}
-                depositStatus={depositState.status}
-                depositConfirmationsRemaining={depositState.confirmationsRemaining}
-                requestStatus={requestState.status}
-                requestConfirmationsRemaining={requestState.confirmationsRemaining}
-                hasPendingWithdraw={pendingActive}
-                depositExceeded={depositExceeded}
-                withdrawExceeded={withdrawExceeded}
-              />
+              <>
+                <VaultActionPanel
+                  isConnected={isConnected}
+                  isAttested={Boolean(isAttested)}
+                  sbaBalance={balance}
+                  csbaBalance={csbaBalance}
+                  depositAmount={depositAmount}
+                  withdrawAmount={withdrawRequestAmount}
+                  onDepositAmountChange={setDepositAmount}
+                  onWithdrawAmountChange={setWithdrawRequestAmount}
+                  onDeposit={handleVaultDeposit}
+                  onRequestWithdraw={handleVaultRequestWithdraw}
+                  depositStatus={depositState.status}
+                  depositConfirmationsRemaining={depositState.confirmationsRemaining}
+                  requestStatus={requestState.status}
+                  requestConfirmationsRemaining={requestState.confirmationsRemaining}
+                  hasPendingWithdraw={pendingActive}
+                  depositExceeded={depositExceeded}
+                  withdrawExceeded={withdrawExceeded}
+                />
+                <VaultWithdrawalsPanel
+                  vaultStatus={vaultStatus}
+                  onRefreshVault={refreshVaultData}
+                  pendingRequests={pendingRequests}
+                  completeStatus={completeState.status}
+                  onCompleteRequest={handleVaultCompleteWithdraw}
+                  onCompleteMatured={handleVaultCompleteMatured}
+                />
+              </>
             )}
           </main>
 
@@ -530,19 +545,9 @@ export default function App() {
                   vaultStatus={vaultStatus}
                   onRefreshVault={refreshVaultData}
                   csbaBalance={csbaBalance}
-                  pendingCsbaAmount={pendingCsbaAmount}
-                  pendingSbaEstimate={pendingSbaEstimate}
-                  pendingActive={pendingActive}
-                  pendingUnlockBlock={pendingUnlockBlock}
-                  blocksUntilUnlock={blocksUntilUnlock}
-                  currentBlock={currentBlock}
                   sharePriceScaled={sharePriceScaled}
                   monthlyRateBps={monthlyRateBps}
                   blocksPerMonth={blocksPerMonth}
-                  pendingRequests={pendingRequests}
-                  completeStatus={completeState.status}
-                  onCompleteRequest={handleVaultCompleteWithdraw}
-                  onCompleteMatured={handleVaultCompleteMatured}
                 />
                 <BalanceCard
                   balance={balance}

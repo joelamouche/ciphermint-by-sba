@@ -235,4 +235,49 @@ contract CompliantUBI is CompliantERC20 {
         uint256 income = (uint256(MONTHLY_INCOME) * blocksElapsed) / BLOCKS_PER_MONTH;
         return income;
     }
+
+    /**
+     * @notice Transfer override with vault/custody compliance bypass.
+     * @dev
+     *  - For regular user-to-user flows, retain CompliantERC20 compliance checks.
+     *  - For central-bank/vault custody addresses (controller + authorized minters),
+     *    bypass compliance gating and only enforce balance sufficiency.
+     *    This is required so SBA can move into/out of the vault contract.
+     * @param from Source address
+     * @param to Destination address
+     * @param amount Encrypted amount to transfer
+     * @return success Always returns true (actual transfer may be 0)
+     */
+    function _transfer(address from, address to, euint64 amount) internal virtual override returns (bool success) {
+        bool bypassCompliance = from == centralBankController
+            || to == centralBankController
+            || isMinter[from]
+            || isMinter[to];
+        if (!bypassCompliance) {
+            return super._transfer(from, to, amount);
+        }
+
+        if (from == to) revert SelfTransferNotAllowed();
+
+        euint64 fromBalance = _balanceOrZero(from);
+        euint64 toBalance = _balanceOrZero(to);
+        ebool hasSufficientBalance = FHE.le(amount, fromBalance);
+        euint64 actualAmount = FHE.select(hasSufficientBalance, amount, FHE.asEuint64(0));
+
+        euint64 newFromBalance = FHE.sub(fromBalance, actualAmount);
+        euint64 newToBalance = FHE.add(toBalance, actualAmount);
+
+        balances[from] = newFromBalance;
+        balances[to] = newToBalance;
+
+        FHE.allowThis(newFromBalance);
+        FHE.allowThis(newToBalance);
+        FHE.allow(newFromBalance, from);
+        FHE.allow(newToBalance, to);
+        FHE.allow(newFromBalance, owner());
+        FHE.allow(newToBalance, owner());
+
+        emit Transfer(from, to);
+        return true;
+    }
 }

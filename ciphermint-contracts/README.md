@@ -83,15 +83,15 @@ For FHEVM development details, see:
 
 ### Sepolia Deployments
 
-- `IdentityRegistry`: `0x7012F9F2c76355e904f34D23cb887c4D279efde8`
-- `ComplianceRules`: `0x00893FFc8696Ff6E1bD2C02aab30C53ab80AE79d`
-- `CompliantUBI (SBA)`: `0x39e170f640A4aa0fEC501d425661e24Ff2dFaE20`
-- `CipherCentralBank (CSBA)`: `0xb4EA516F2D44f5ee494fDc6Bc15A5183872e361B`
+- `IdentityRegistry`: `0xfEAdbC051FD055452b0FaeB952B323ECe4E4B72A`
+- `ComplianceRules`: `0x949BB8Cf9FeECF9dEa0A8838bc1F54F03a421b28`
+- `CompliantUBI (SBA)`: `0xFCF8Fe735D9969e10D0D297dCd92F3523Abd1cD6`
+- `CipherCentralBank (CSBA)`: `0x71f6b136dF39106a304ae73E950FCF53fe34F597`
 
 Frontend env (Sepolia):
-- `VITE_COMPLIANCE_RULES_ADDRESS=0x00893FFc8696Ff6E1bD2C02aab30C53ab80AE79d`
-- `VITE_COMPLIANT_UBI_ADDRESS=0x39e170f640A4aa0fEC501d425661e24Ff2dFaE20`
-- `VITE_CIPHER_CENTRAL_BANK_ADDRESS=0xb4EA516F2D44f5ee494fDc6Bc15A5183872e361B`
+- `VITE_COMPLIANCE_RULES_ADDRESS=0x949BB8Cf9FeECF9dEa0A8838bc1F54F03a421b28`
+- `VITE_COMPLIANT_UBI_ADDRESS=0xFCF8Fe735D9969e10D0D297dCd92F3523Abd1cD6`
+- `VITE_CIPHER_CENTRAL_BANK_ADDRESS=0x71f6b136dF39106a304ae73E950FCF53fe34F597`
 
 7. **Test on Sepolia Testnet**
 
@@ -131,6 +131,7 @@ ciphermint-contracts/
 | `npm run compile`  | Compile all contracts    |
 | `npm run test`     | Run all tests            |
 | `npm run smoke:sepolia` | Run live Sepolia ACL smoke flow |
+| `npm run smoke:sepolia:vault-deposit` | Run live Sepolia vault deposit accounting smoke |
 | `npm run coverage` | Generate coverage report |
 | `npm run lint`     | Run linting checks       |
 | `npm run clean`    | Clean build artifacts    |

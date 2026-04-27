@@ -4,14 +4,24 @@ import { isHex, toHex, type Hex } from "viem";
 import type { Status } from "../App";
 import { cipherCentralBankAbi } from "../abis/cipherCentralBank";
 import { compliantErc20Abi } from "../abis/compliantErc20";
-import { CIPHER_CENTRAL_BANK_ADDRESS, COMPLIANT_UBI_ADDRESS } from "../config";
+import {
+  CIPHER_CENTRAL_BANK_ADDRESS,
+  COMPLIANT_UBI_ADDRESS,
+  TX_CONFIRMATIONS_REQUIRED,
+} from "../config";
 import { encryptUint64 } from "../lib/fhevm";
 import { parseTokenAmount } from "../lib/tokenFormat";
 
 interface UseVaultActionsParams {
   userAddress?: `0x${string}`;
   setError: (message: string | null) => void;
-  onSuccess?: () => void;
+  onSuccess?: (
+    action:
+      | "deposit"
+      | "requestWithdraw"
+      | "completeWithdraw"
+      | "completeWithdrawMany"
+  ) => void | Promise<void>;
 }
 
 interface ActionState {
@@ -19,7 +29,7 @@ interface ActionState {
   confirmationsRemaining: number | null;
 }
 
-const REQUIRED_CONFIRMATIONS = 6;
+const REQUIRED_CONFIRMATIONS = TX_CONFIRMATIONS_REQUIRED;
 
 function normalizeHex(value: unknown): Hex | null {
   if (typeof value === "string") {
@@ -134,7 +144,7 @@ export function useVaultActions({
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
       });
       await waitForConfirmations(depositHash, setDepositState);
-      onSuccess?.();
+      await onSuccess?.("deposit");
     } catch (err) {
       setDepositState({ status: "error", confirmationsRemaining: null });
       setError(err instanceof Error ? err.message : "Vault deposit failed.");
@@ -170,7 +180,7 @@ export function useVaultActions({
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
       });
       await waitForConfirmations(hash, setRequestState);
-      onSuccess?.();
+      await onSuccess?.("requestWithdraw");
     } catch (err) {
       setRequestState({ status: "error", confirmationsRemaining: null });
       setError(err instanceof Error ? err.message : "Withdraw request failed.");
@@ -198,7 +208,7 @@ export function useVaultActions({
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
       });
       await waitForConfirmations(hash, setCompleteState);
-      onSuccess?.();
+      await onSuccess?.("completeWithdraw");
     } catch (err) {
       setCompleteState({ status: "error", confirmationsRemaining: null });
       setError(err instanceof Error ? err.message : "Complete withdraw failed.");
@@ -232,7 +242,7 @@ export function useVaultActions({
         confirmationsRemaining: REQUIRED_CONFIRMATIONS,
       });
       await waitForConfirmations(hash, setCompleteState);
-      onSuccess?.();
+      await onSuccess?.("completeWithdrawMany");
     } catch (err) {
       setCompleteState({ status: "error", confirmationsRemaining: null });
       setError(err instanceof Error ? err.message : "Batch complete withdraw failed.");

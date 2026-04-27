@@ -122,7 +122,7 @@ describe("CipherCentralBank integration", function () {
 
     const after = await readUserBalances(alice);
     expect(after.csba).to.equal(before.csba + DEPOSIT);
-    expect(after.sba).to.equal(before.sba);
+    expect(after.sba).to.equal(before.sba - DEPOSIT);
   });
 
   it("deposit(0) does not mint new shares", async function () {
@@ -184,11 +184,14 @@ describe("CipherCentralBank integration", function () {
   });
 
   it("requestWithdraw then completeWithdraw after lock; NoPendingWithdraw if none", async function () {
+    const beforeDeposit = await readUserBalances(alice);
     const a = await enc64(sbaAddr, alice, DEPOSIT);
     await sba.connect(alice).approve(bankAddr, a.handles[0], a.inputProof);
     const d = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).deposit(d.handles[0], d.inputProof);
     const afterDeposit = await readUserBalances(alice);
+    expect(afterDeposit.sba).to.equal(beforeDeposit.sba - DEPOSIT);
+    expect(afterDeposit.csba).to.equal(beforeDeposit.csba + DEPOSIT);
 
     const w = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).requestWithdraw(w.handles[0], w.inputProof);
@@ -212,10 +215,14 @@ describe("CipherCentralBank integration", function () {
 
   it("payout after 3 months is higher than after 1 month", async function () {
     // --- cycle A: 1-month lock completion ---
+    const beforeDepositA = await readUserBalances(alice);
     const approveA = await enc64(sbaAddr, alice, DEPOSIT);
     await sba.connect(alice).approve(bankAddr, approveA.handles[0], approveA.inputProof);
     const depA = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).deposit(depA.handles[0], depA.inputProof);
+    const afterDepositA = await readUserBalances(alice);
+    expect(afterDepositA.sba).to.equal(beforeDepositA.sba - DEPOSIT);
+    expect(afterDepositA.csba).to.equal(beforeDepositA.csba + DEPOSIT);
 
     const csbaAHandle = await bank.balanceOf(alice.address);
     const csbaA = await fhevm.userDecryptEuint(FhevmType.euint64, csbaAHandle, bankAddr, alice);
@@ -233,10 +240,16 @@ describe("CipherCentralBank integration", function () {
     expect(payout1Month).to.equal(expected1Month);
 
     // --- cycle B: 3-month lock completion ---
+    const beforeDepositB = await readUserBalances(alice);
+    const sharePriceBeforeDepositB = await bank.sharePriceScaled();
     const approveB = await enc64(sbaAddr, alice, DEPOSIT);
     await sba.connect(alice).approve(bankAddr, approveB.handles[0], approveB.inputProof);
     const depB = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).deposit(depB.handles[0], depB.inputProof);
+    const afterDepositB = await readUserBalances(alice);
+    expect(afterDepositB.sba).to.equal(beforeDepositB.sba - DEPOSIT);
+    const expectedMintedSharesB = (DEPOSIT * DECIMALS) / sharePriceBeforeDepositB;
+    expect(afterDepositB.csba).to.equal(beforeDepositB.csba + expectedMintedSharesB);
 
     const csbaBHandle = await bank.balanceOf(alice.address);
     const csbaB = await fhevm.userDecryptEuint(FhevmType.euint64, csbaBHandle, bankAddr, alice);
@@ -255,10 +268,14 @@ describe("CipherCentralBank integration", function () {
   });
 
   it("reverts completeWithdraw before lock period ends", async function () {
+    const beforeDeposit = await readUserBalances(alice);
     const a = await enc64(sbaAddr, alice, DEPOSIT);
     await sba.connect(alice).approve(bankAddr, a.handles[0], a.inputProof);
     const d = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).deposit(d.handles[0], d.inputProof);
+    const afterDeposit = await readUserBalances(alice);
+    expect(afterDeposit.sba).to.equal(beforeDeposit.sba - DEPOSIT);
+    expect(afterDeposit.csba).to.equal(beforeDeposit.csba + DEPOSIT);
 
     const w = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).requestWithdraw(w.handles[0], w.inputProof);
@@ -271,10 +288,14 @@ describe("CipherCentralBank integration", function () {
   });
 
   it("supports multiple pending requests with independent unlock blocks", async function () {
+    const beforeDeposit = await readUserBalances(alice);
     const a = await enc64(sbaAddr, alice, DEPOSIT);
     await sba.connect(alice).approve(bankAddr, a.handles[0], a.inputProof);
     const d = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).deposit(d.handles[0], d.inputProof);
+    const afterDeposit = await readUserBalances(alice);
+    expect(afterDeposit.sba).to.equal(beforeDeposit.sba - DEPOSIT);
+    expect(afterDeposit.csba).to.equal(beforeDeposit.csba + DEPOSIT);
 
     const half = DEPOSIT / 2n;
     const w1 = await enc64(bankAddr, alice, half);
@@ -324,10 +345,14 @@ describe("CipherCentralBank integration", function () {
   });
 
   it("completeWithdrawMany pays sum of matured requests", async function () {
+    const beforeDeposit = await readUserBalances(alice);
     const approve = await enc64(sbaAddr, alice, DEPOSIT);
     await sba.connect(alice).approve(bankAddr, approve.handles[0], approve.inputProof);
     const dep = await enc64(bankAddr, alice, DEPOSIT);
     await bank.connect(alice).deposit(dep.handles[0], dep.inputProof);
+    const afterDeposit = await readUserBalances(alice);
+    expect(afterDeposit.sba).to.equal(beforeDeposit.sba - DEPOSIT);
+    expect(afterDeposit.csba).to.equal(beforeDeposit.csba + DEPOSIT);
 
     const third = DEPOSIT / 3n;
     const r1 = await enc64(bankAddr, alice, third);

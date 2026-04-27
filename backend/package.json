@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "test:integration": "INTEGRATION_TESTS_ENABLED=true vitest run --config=vitest.integration.config.ts",
     "test:attest:manual": "MANUAL_ATTEST_ENABLED=true vitest run --config=vitest.integration.config.ts src/lib/__tests__/attestIdentity.manual.integration.test.ts",
+    "test:vault:smoke:manual": "MANUAL_VAULT_SMOKE_ENABLED=true vitest run --config=vitest.integration.config.ts src/lib/__tests__/vaultDeposit.manual.integration.test.ts",
     "deploy:heroku": "bash scripts/deploy-heroku.sh"
   },
   "keywords": [],

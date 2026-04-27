@@ -128,7 +128,6 @@ export function VaultActionPanel({
           !withdrawAmount ||
           !csbaKnown ||
           withdrawExceeded ||
-          hasPendingWithdraw ||
           requestStatus === "loading" ||
           requestStatus === "confirming"
         }
@@ -141,9 +140,7 @@ export function VaultActionPanel({
               ? "Request another withdrawal"
               : requestStatus === "error"
                 ? "Retry request"
-                : hasPendingWithdraw
-                  ? "Pending withdrawal active"
-                  : "Request withdrawal"}
+                : "Request withdrawal"}
       </button>
       {requestStatus === "confirming" && requestConfirmationsRemaining != null && (
         <p className="status-warn status-center">
@@ -154,7 +151,7 @@ export function VaultActionPanel({
 
       {hasPendingWithdraw && (
         <p className="muted status-center">
-          Pending requests can be completed from the Vault Position panel once unlocked.
+          Pending requests can be completed from the Vault Positions panel once unlocked.
         </p>
       )}
     </section>
